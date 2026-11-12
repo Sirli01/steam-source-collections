@@ -1,0 +1,32 @@
+# ==== 个人数据：绝对不要提交 ====
+private/
+out/
+demo/
+# 设计稿截图与渲染预览：含本机真实统计数字、导出包文件名与调试探针
+prototypes/preview/
+*.log
+*.local.json
+local_config.json
+config.json
+*.cookie
+# 一键导出包含你的完整游戏库与许可记录，属于个人数据
+steam-licenses-*.json
+*.bak
+backups/
+
+# ==== Python ====
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+.coverage
+.DS_Store
+
+# 保留仓库自带的合成示例（不含任何真实账号数据）
+!examples/*.html
+!examples/*.json
+!examples/*.txt

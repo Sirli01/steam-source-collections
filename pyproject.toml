@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "steam-source-collections"
+version = "0.7.2"
+description = "Group a Steam library by how each game was acquired, and generate a reviewable collection plan"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+dependencies = []
+keywords = ["steam", "collections", "library", "license", "organizer"]
+
+[project.scripts]
+steam-source-collections = "steam_source_collections.cli:main"
+steam-collections-gui = "steam_source_collections.gui:main"
+
+[tool.setuptools]
+packages = ["steam_source_collections"]
+
+[tool.setuptools.package-data]
+steam_source_collections = ["gui_page.html", "bookmark_src.js"]

@@ -1,0 +1,19 @@
+{
+  "response": {
+    "game_count": 12,
+    "games": [
+      {"appid": 1001, "name": "Aurora Drift", "playtime_forever": 740},
+      {"appid": 1002, "name": "Neon Foundry", "playtime_forever": 0},
+      {"appid": 1003, "name": "Tidebound Tactics", "playtime_forever": 320},
+      {"appid": 1004, "name": "Hollow Lantern", "playtime_forever": 0},
+      {"appid": 1005, "name": "Paper Kingdom", "playtime_forever": 0},
+      {"appid": 1006, "name": "Circuit Breaker", "playtime_forever": 96},
+      {"appid": 1007, "name": "Moss & Stone", "playtime_forever": 0},
+      {"appid": 1008, "name": "Starfall Courier", "playtime_forever": 12},
+      {"appid": 1009, "name": "Velvet Detective", "playtime_forever": 0},
+      {"appid": 1010, "name": "Cloud Nine Arena", "playtime_forever": 0, "family_shared": true},
+      {"appid": 1011, "name": "Freeplay Sandbox", "playtime_forever": 45},
+      {"appid": 1012, "name": "Sunset Rally", "playtime_forever": 0}
+    ]
+  }
+}

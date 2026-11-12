@@ -1,0 +1,43 @@
+{
+  "schema": "steam-license-export/1",
+  "exported_at": "2026-11-08T09:00:00.000Z",
+  "_comment": "合成的导出包样例，全部为虚构游戏名；格式与导出书签的输出一致。playtimes 由 Web API 一次取回；CLI --auto 还会用本机 Steam 补时长。不要提交真实导出包。",
+  "steamid64": "76561198000000000",
+  "license_pages": 1,
+  "license_total": 11,
+  "name_source": "webapi",
+  "licenses": [
+    {"date": "2023-01-14", "name": "Aurora Drift", "method": "Steam 商店", "packageid": "", "appids": [1001]},
+    {"date": "2024-06-02", "name": "Neon Foundry", "method": "Steam 商店", "packageid": "", "appids": [1002]},
+    {"date": "2022-11-20", "name": "Tidebound Tactics", "method": "零售", "packageid": "", "appids": [1003]},
+    {"date": "2021-08-08", "name": "Hollow Lantern (Retail)", "method": "Retail", "packageid": "", "appids": [1004]},
+    {"date": "2020-12-25", "name": "Paper Kingdom", "method": "免费赠送", "packageid": "55001", "appids": [1005]},
+    {"date": "2023-05-19", "name": "Circuit Breaker", "method": "Complimentary", "packageid": "", "appids": [1006]},
+    {"date": "2022-02-14", "name": "Moss & Stone", "method": "礼物", "packageid": "", "appids": [1007]},
+    {"date": "2024-03-01", "name": "Starfall Courier", "method": "Guest Pass", "packageid": "", "appids": [1008]},
+    {"date": "2025-01-03", "name": "Velvet Detective", "method": "Steam Store - Complimentary", "packageid": "", "appids": [1009]}
+  ],
+  "owned_appids": [1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008, 1009, 1010, 1011, 1012],
+  "owned_packages": [55001],
+  "auto_grant_appids": [],
+  "app_names": {
+    "1001": "Aurora Drift",
+    "1002": "Neon Foundry",
+    "1003": "Tidebound Tactics",
+    "1004": "Hollow Lantern",
+    "1005": "Paper Kingdom",
+    "1006": "Circuit Breaker",
+    "1007": "Moss & Stone",
+    "1008": "Starfall Courier",
+    "1009": "Velvet Detective",
+    "1010": "Cloud Nine Arena",
+    "1011": "Freeplay Sandbox",
+    "1012": "Sunset Rally"
+  },
+  "playtimes": {
+    "1001": 740, "1006": 96, "1008": 12, "1011": 45
+  },
+  "package_apps": {
+    "55001": [{"id": 1005, "name": "Paper Kingdom"}]
+  }
+}

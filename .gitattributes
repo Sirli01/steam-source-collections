@@ -1,0 +1,18 @@
+# Normalize line endings so the repo behaves the same on Windows, macOS and Linux.
+* text=auto eol=lf
+
+# Windows launchers must keep CRLF, otherwise cmd.exe can misparse them.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Shell scripts must keep LF, otherwise the shebang breaks on macOS/Linux.
+*.sh text eol=lf
+
+# Binary assets: never touch them.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary

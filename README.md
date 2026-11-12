@@ -225,28 +225,24 @@ python -m steam_source_collections ... \
 - 输出的 `report.md` / `mapping.csv`、以及 `steam-licenses-*.json` 导出包都含你的**完整游戏库与许可记录**，属于个人数据。`private/`、`out/`、`demo/`、`prototypes/preview/`、`steam-licenses-*.json` 已在 `.gitignore` 中忽略，**发布前请 `git status --ignored` 复查一遍**。
 - 自动化访问请遵守 Steam 服务条款、控制请求频率，不要用于批量抓取他人数据。
 
-## 发布到你自己的 GitHub
+## 二次发布 / 部署到你自己的账号
 
-代码是 MIT 许可，可以作为你的仓库公开。仓库已经 `git init` 并配好 `.gitignore`，但**还没有任何提交，也没有远程地址**：
+代码是 MIT 许可。想基于它改一版，直接 Fork 即可；想放到一个独立的新仓库里：
 
 ```bash
+git clone https://github.com/Sirli01/steam-source-collections.git
 cd steam-source-collections
 git status --ignored          # 确认 out/、demo/、prototypes/preview/ 被忽略
-git add .
-git status                    # 逐项核对；不应出现 steam-licenses-*.json 或 *.bak
-git commit -m "Initial release: Steam collections by acquisition source"
-git branch -M main
+git remote remove origin
 # 在 GitHub 网页新建一个空仓库（不要勾选 README / LICENSE / .gitignore），然后：
 git remote add origin https://github.com/<你的用户名>/steam-source-collections.git
 git push -u origin main
-# 若已安装并登录 GitHub CLI，也可一步到位：
-# gh repo create steam-source-collections --public --source=. --push
 ```
 
-发布前建议做三件事：
+改之前建议先做三件事：
 
 1. 把 `LICENSE` 里的版权行改成你的名字（或保留 `contributors`）；
-2. **检查提交身份**：`git config user.name` / `git config user.email` 会永久写进公开提交记录。不想公开私人邮箱，就只对当前仓库执行一次 `git config user.email "<用户名>@users.noreply.github.com"`（带数字前缀的专用地址可在 GitHub 的 Emails 设置页查到），不影响你的全局配置；
+2. **检查提交身份**：`git config user.name` / `git config user.email` 会永久写进公开提交记录。不想公开私人邮箱，就只对当前仓库执行一次 `git config user.email "<用户名>@users.noreply.github.com"`（带数字前缀的专用地址可在 GitHub 的 Emails 设置页查到），不影响全局配置；
 3. 想放效果图，用 `prototypes/ui-variants.html` 这类设计稿，或重新跑一次并打码 SteamID；**别把 `out/` 里的真实报告或 `prototypes/preview/` 的调试截图传上去**。`examples/` 里的样例游戏名全是虚构的，可放心提交。
 
 ## 测试

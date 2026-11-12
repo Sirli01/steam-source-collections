@@ -107,7 +107,8 @@ class PublicFileTests(unittest.TestCase):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         self.assertIn("没有调试接口时", readme)
         self.assertIn("完全退出 Steam", readme)
-        self.assertIn("还没有任何提交", readme)
+        self.assertIn("二次发布", readme)
+        self.assertIn("git status --ignored", readme)
 
 
 if __name__ == "__main__":

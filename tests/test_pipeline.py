@@ -7,9 +7,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from steam_source_collections.licenses import classify, load_licenses, parse_html
-from steam_source_collections.matching import build_index, match_package
-from steam_source_collections.owned import load_family, load_owned
+from steam_source_collections.licenses import LicenseRecord, classify, load_licenses, normalize_date, parse_html
+from steam_source_collections.matching import MatchResult, build_index, match_package
+from steam_source_collections.owned import Game, load_family, load_owned
 from steam_source_collections.plan import build_plan
 from steam_source_collections.report import write_outputs
 
@@ -114,6 +114,34 @@ class PlanTests(unittest.TestCase):
         self.assertEqual(self.plan.assignments[1001]["group"], "store")
         self.assertEqual(self.plan.assignments[1002]["group"], "store")
 
+    def test_normalize_date_formats(self):
+        self.assertEqual(normalize_date("2024 年 2 月 15 日"), "2024-02-15")
+        self.assertEqual(normalize_date("12 Aug, 2024"), "2024-08-12")
+        self.assertEqual(normalize_date("Feb 1, 2025"), "2025-02-01")
+        self.assertEqual(normalize_date("2024-12-1"), "2024-12-01")
+
+    def test_latest_conflict_uses_normalized_localized_dates(self):
+        games = [Game(appid=5001, name="Alpha"), Game(appid=5002, name="Beta")]
+        records = [
+            LicenseRecord(date="2024 年 2 月 15 日", package_name="Alpha",
+                          method_raw="零售", category="retail"),
+            LicenseRecord(date="2024 年 12 月 1 日", package_name="Alpha",
+                          method_raw="免费赠送", category="free"),
+            LicenseRecord(date="12 Aug, 2024", package_name="Beta",
+                          method_raw="免费赠送", category="free"),
+            LicenseRecord(date="1 Feb, 2025", package_name="Beta",
+                          method_raw="Steam 商店", category="store"),
+        ]
+        matches = [
+            MatchResult(games=[games[0]], via="exact", score=1.0),
+            MatchResult(games=[games[0]], via="exact", score=1.0),
+            MatchResult(games=[games[1]], via="exact", score=1.0),
+            MatchResult(games=[games[1]], via="exact", score=1.0),
+        ]
+        latest_plan = build_plan(records, games, matches, set(), set(), conflict="latest")
+        self.assertEqual(latest_plan.assignments[5001]["group"], "free")
+        self.assertEqual(latest_plan.assignments[5002]["group"], "store")
+
     def test_write_outputs(self):
         with tempfile.TemporaryDirectory() as tmp:
             paths = write_outputs(self.plan, Path(tmp), "licenses_sample.html", "owned.json")
@@ -121,6 +149,11 @@ class PlanTests(unittest.TestCase):
             payload = json.loads((Path(tmp) / "collections_plan.json").read_text(encoding="utf-8"))
             self.assertEqual(payload["schema"], "steam-source-collections/1")
             self.assertEqual(len(payload["groups"]), 9)
+            html = (Path(tmp) / "report.html").read_text(encoding="utf-8")
+            self.assertIn("没有许可记录的游戏", html)
+            self.assertIn("copyBox(", html)
+            self.assertNotIn("{{", html)
+            self.assertNotIn("}}", html)
 
 
 if __name__ == "__main__":

@@ -30,6 +30,26 @@ from .vdfcache import package_cache_path, read_package_apps
 STEAMID64_BASE = 76561197960265728
 BUNDLE_GLOB = "steam-licenses-*.json"
 
+_MAX_VDF_CACHE = 4
+_PLAYTIME_CACHE: dict[tuple[str, int, int], dict[int, int]] = {}
+_PACKAGE_CACHE: dict[tuple[str, int, int], dict[int, list[int]]] = {}
+
+
+def _file_cache_key(path: Path) -> tuple[str, int, int] | None:
+    try:
+        st = path.stat()
+        return str(path.resolve()), st.st_mtime_ns, st.st_size
+    except OSError:
+        return None
+
+
+def _cache_put(cache: dict, key: tuple[str, int, int], value) -> None:
+    if key in cache:
+        cache.pop(key)
+    while len(cache) >= _MAX_VDF_CACHE:
+        cache.pop(next(iter(cache)))
+    cache[key] = value
+
 
 @dataclass
 class LocalSteam:
@@ -136,6 +156,15 @@ def discover_root(explicit: str | Path | None = None) -> Path | None:
         if (resolved / "userdata").is_dir() or (resolved / "steam.exe").is_file():
             return resolved
     return None
+
+
+def read_all_steamids(root: Path) -> list[str]:
+    """Return all 17-digit SteamID64 values present in loginusers.vdf."""
+    path = root / "config/loginusers.vdf"
+    if not path.is_file():
+        return []
+    text = path.read_text(encoding="utf-8-sig", errors="replace")
+    return list(dict.fromkeys(re.findall(r'"(\d{17})"\s*\{', text)))
 
 
 def read_steamid64(root: Path) -> str | None:
@@ -251,6 +280,9 @@ def read_playtimes(path: Path) -> dict[int, int]:
     """Extract ``appid -> playtime`` from localconfig.vdf (text VDF)."""
     if not path.is_file():
         return {}
+    key = _file_cache_key(path)
+    if key and key in _PLAYTIME_CACHE:
+        return dict(_PLAYTIME_CACHE[key])
     text = path.read_text(encoding="utf-8-sig", errors="replace")
     result: dict[int, int] = {}
     for match in re.finditer(r'"(\d{2,8})"\s*\{', text):
@@ -258,20 +290,46 @@ def read_playtimes(path: Path) -> dict[int, int]:
         playtime = re.search(r'"Playtime"\s*"(\d+)"', window)
         if playtime:
             result[int(match.group(1))] = int(playtime.group(1))
+    if key:
+        _cache_put(_PLAYTIME_CACHE, key, dict(result))
     return result
 
 
-def discover(explicit: str | Path | None = None) -> LocalSteam:
+def _read_package_apps_cached(path: Path) -> dict[int, list[int]]:
+    key = _file_cache_key(path)
+    if key and key in _PACKAGE_CACHE:
+        return dict(_PACKAGE_CACHE[key])
+    raw = read_package_apps(path)
+    if raw and key:
+        _cache_put(_PACKAGE_CACHE, key, dict(raw))
+    return raw
+
+
+def discover(explicit: str | Path | None = None,
+             preferred_steamid64: str | None = None) -> LocalSteam:
     info = LocalSteam()
     info.root = discover_root(explicit)
     if not info.root:
         info.notes.append("未找到本机 Steam 安装目录，可用 --steam-root 指定")
         return info
 
-    info.steamid64 = read_steamid64(info.root)
+    most_recent_sid = read_steamid64(info.root)
+    info.steamid64 = most_recent_sid
     if info.steamid64:
         info.id3 = _id3_from_steamid64(info.steamid64)
+
     userdata = info.root / "userdata"
+    preferred = str(preferred_steamid64 or "").strip()
+    if re.fullmatch(r"\d{17}", preferred):
+        preferred_id3 = _id3_from_steamid64(preferred)
+        if preferred_id3 and (userdata / preferred_id3).is_dir():
+            if most_recent_sid and most_recent_sid != preferred:
+                info.notes.append("导出包账号与本机最近登录账号不同，已自动匹配到导出包所属的 Steam 账号目录")
+            info.steamid64 = preferred
+            info.id3 = preferred_id3
+        elif preferred != info.steamid64:
+            info.notes.append("注意：导出包账号与本机 Steam 账号不一致，且本机没有该账号的缓存目录")
+
     if not info.id3 and userdata.is_dir():
         folders = [d.name for d in userdata.iterdir() if d.is_dir() and d.name.isdigit()]
         if len(folders) == 1:
@@ -297,7 +355,7 @@ def discover(explicit: str | Path | None = None) -> LocalSteam:
 
     cache = package_cache_path(info.root)
     if cache:
-        raw = read_package_apps(cache)
+        raw = _read_package_apps_cached(cache)
         if raw:
             # usable packages are filtered against owned appids in bundle.py,
             # once the export's owned list is known; keep the full map here.
@@ -310,9 +368,42 @@ def discover(explicit: str | Path | None = None) -> LocalSteam:
 
 
 def download_dirs() -> list[Path]:
+    candidates: list[Path] = []
+    if os.name == "nt":
+        try:
+            import winreg
+
+            shell_key = r"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders"
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, shell_key) as handle:
+                for value_name in (
+                    "{374DE290-123F-4565-9164-39C4925E467B}",
+                    "Desktop",
+                ):
+                    try:
+                        raw, _ = winreg.QueryValueEx(handle, value_name)
+                        if raw:
+                            candidates.append(Path(os.path.expandvars(str(raw))))
+                    except OSError:
+                        continue
+        except (ImportError, OSError):
+            pass
+
     home = Path.home()
-    candidates = [home / "Downloads", home / "下载", home / "Desktop", home / "桌面"]
-    return [p for p in candidates if p.is_dir()]
+    candidates += [home / "Downloads", home / "下载", home / "Desktop", home / "桌面"]
+    seen: set[str] = set()
+    existing: list[Path] = []
+    for path in candidates:
+        if not path.is_dir():
+            continue
+        try:
+            key = str(path.resolve()).casefold()
+        except OSError:
+            key = str(path).casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        existing.append(path)
+    return existing
 
 
 def find_latest_bundle(extra: str | Path | None = None) -> Path | None:

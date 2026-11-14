@@ -17,6 +17,7 @@ import subprocess
 import sys
 import webbrowser
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 
 from . import __version__, cefbridge
@@ -47,6 +48,7 @@ class Analysis:
     outputs: list[Path]
     bundle_path: Path
     local: LocalSteam
+    include_cross: bool = False
 
     @property
     def report_path(self) -> Path | None:
@@ -162,7 +164,7 @@ def scan(local: LocalSteam | None = None, bundle_path: str | Path | None = None,
 
 
 def build_notes(meta: dict) -> list[str]:
-    notes: list[str] = []
+    notes: list[str] = list(meta.get("account_notes") or [])
     if meta.get("local_cache_packages"):
         notes.append(
             f"已只读解析本机 Steam 缓存：{meta['local_cache_packages']} 个礼包包、"
@@ -179,6 +181,10 @@ def build_notes(meta: dict) -> list[str]:
             f"另有 {meta['bundle_expanded_rows']} 行是合集包 / 促销包，"
             f"已按本机礼包缓存整包展开，把 {meta['bundle_expanded_apps']} 个 appid "
             "（含本体与 DLC）归入同一来源；可在 mapping.csv 里筛 match_via=bundle 核对。"
+        )
+    if meta.get("localized_matched_rows"):
+        notes.append(
+            f"另有 {meta['localized_matched_rows']} 行中文许可名由本机缓存本地化名称精确对齐。"
         )
     if meta.get("unnamed_apps"):
         notes.append(
@@ -201,7 +207,9 @@ def build_notes(meta: dict) -> list[str]:
 
 
 def analyse(bundle_path: str | Path | None = None, outdir: str | Path = "out",
-            infer_order: bool = True, threshold: float = 0.86) -> Analysis:
+            infer_order: bool = True, threshold: float = 0.86,
+            conflict: str = "priority", extra_groups: bool = True,
+            include_cross: bool = False) -> Analysis:
     """One-click statistics: locate everything, build the plan, write reports."""
     local = discover()
     path = locate_bundle(outdir, bundle_path)
@@ -212,15 +220,19 @@ def analyse(bundle_path: str | Path | None = None, outdir: str | Path = "out",
             "也可以把下载好的 steam-licenses-*.json 直接拖进窗口。"
         )
     bundle = load_bundle(path, local, threshold, infer_order=infer_order)
-    plan = build_plan(bundle.records, bundle.games, bundle.matches, set(), set())
+    plan = build_plan(
+        bundle.records, bundle.games, bundle.matches, set(), set(),
+        conflict=conflict, extra_groups=extra_groups,
+    )
     out = Path(outdir)
+    notes = build_notes(bundle.meta)
     outputs = write_outputs(
-        plan, out, path.name, f"一键导出包 {path.name}", notes=build_notes(bundle.meta),
+        plan, out, path.name, f"一键导出包 {path.name}", notes=notes,
     )
     return Analysis(
-        plan=plan, meta=bundle.meta, notes=build_notes(bundle.meta),
+        plan=plan, meta=bundle.meta, notes=notes,
         outputs=outputs, bundle_path=path, local=local,
-        _games=bundle.games,
+        include_cross=include_cross, _games=bundle.games,
     )
 
 
@@ -233,7 +245,8 @@ BASELINE_NAME = "client_baseline.json"
 
 
 def merge_plan_with_client(plan: Plan, existing: list[dict],
-                           baseline: dict | None = None) -> list[dict]:
+                           baseline: dict | None = None,
+                           include_cross: bool = False) -> list[dict]:
     """Build client-side writes without undoing the user's manual edits.
 
     ``baseline`` maps a group name to the appids written last time. If it is
@@ -248,10 +261,11 @@ def merge_plan_with_client(plan: Plan, existing: list[dict],
         if str(item.get("name", "")).startswith(prefix)
     }
     baseline = baseline or {}
+    allowed = ("source", "cross") if include_cross else ("source",)
     items: list[dict] = []
     alphabet = string.ascii_letters + string.digits
     for group in plan.groups:
-        if group.get("kind") != "source" or not group.get("appids"):
+        if group.get("kind") not in allowed or not group.get("appids"):
             continue
         name = group["name"]
         want = {int(a) for a in group["appids"] if str(a).isdigit()}
@@ -273,18 +287,31 @@ def merge_plan_with_client(plan: Plan, existing: list[dict],
     return items
 
 
-def client_write_plan(analysis: Analysis, outdir: str | Path) -> dict:
+def client_write_plan(analysis: Analysis, outdir: str | Path,
+                      include_cross: bool | None = None) -> dict:
     """Write through the *running* Steam client, which uploads to Steam Cloud."""
+    cross = getattr(analysis, "include_cross", False) if include_cross is None else include_cross
     try:
         existing = cefbridge.list_managed()
     except (cefbridge.CEFError, OSError) as exc:
         raise ServiceError(f"读取 Steam 收藏集失败：{exc}") from exc
-    path = Path(outdir) / BASELINE_NAME
+
+    out = Path(outdir)
+    backup_dir = out / "backups"
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    snapshot_path = backup_dir / f"client-collections.{stamp}.bak.json"
+    snapshot_path.write_text(
+        json.dumps(existing, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+    path = out / BASELINE_NAME
     try:
         baseline = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
     except (OSError, ValueError):
         baseline = {}
-    items = merge_plan_with_client(analysis.plan, existing, baseline)
+    items = merge_plan_with_client(analysis.plan, existing, baseline, include_cross=cross)
     try:
         result = cefbridge.save_many(items)
     except (cefbridge.CEFError, OSError) as exc:
@@ -302,15 +329,17 @@ def client_write_plan(analysis: Analysis, outdir: str | Path) -> dict:
         "via": "client",
         "collections": [item["name"] for item in items],
         "saved": result,
-        "backups": [],
+        "backups": [str(snapshot_path)],
     }
 
 
-def preflight(analysis: Analysis) -> dict:
+def preflight(analysis: Analysis, include_cross: bool | None = None) -> dict:
     """Read-only capability check; never probes Steam's process."""
+    cross = getattr(analysis, "include_cross", False) if include_cross is None else include_cross
+    allowed = ("source", "cross") if cross else ("source",)
     groups = [
         cefbridge.PREFIX + group["name"] for group in analysis.plan.groups
-        if group.get("kind") == "source" and group.get("appids")
+        if group.get("kind") in allowed and group.get("appids")
     ]
     cloud = analysis.local.cloud_path
     if cefbridge.debugger_available():
@@ -332,7 +361,7 @@ def preflight(analysis: Analysis) -> dict:
                 "via": "file", "cef_available": False,
                 "collections_to_write": groups}
     try:
-        info = writeback_preview(Path(cloud), analysis.plan)
+        info = writeback_preview(Path(cloud), analysis.plan, include_cross=cross)
     except (WritebackError, OSError, json.JSONDecodeError) as exc:
         return {"writable": False, "reason": str(exc), "via": "file",
                 "cef_available": False, "collections_to_write": groups}
@@ -344,13 +373,14 @@ def preflight(analysis: Analysis) -> dict:
 
 
 def apply_plan(analysis: Analysis, outdir: str | Path = "out",
-               confirm: bool = False) -> dict:
+               confirm: bool = False, include_cross: bool | None = None) -> dict:
     """Write to Steam: prefer the running client, fall back to the file store."""
     if not confirm:
         raise ServiceError("需要用户在界面上确认后才会写入。")
-    pre = preflight(analysis)
+    cross = getattr(analysis, "include_cross", False) if include_cross is None else include_cross
+    pre = preflight(analysis, include_cross=cross)
     if pre.get("via") == "client":
-        return client_write_plan(analysis, outdir)
+        return client_write_plan(analysis, outdir, include_cross=cross)
     if not pre.get("writable"):
         raise ServiceError("收藏集文件不可安全写入：" + (pre.get("reason") or "原因未知"))
     if steam_status():
@@ -359,7 +389,8 @@ def apply_plan(analysis: Analysis, outdir: str | Path = "out",
             "请改用文件方式写入：在托盘图标右键 → 退出，再点一次写入。"
         )
     try:
-        backups = writeback_apply(Path(pre["cloud_path"]), analysis.plan, Path(outdir))
+        backups = writeback_apply(Path(pre["cloud_path"]), analysis.plan,
+                                  Path(outdir), include_cross=cross)
     except WritebackError as exc:
         raise ServiceError(str(exc)) from exc
     return {
@@ -379,15 +410,78 @@ def _backup_candidates(cloud: Path, outdir: Path) -> list[Path]:
     return sorted(set(found), key=lambda p: p.stat().st_mtime, reverse=True)
 
 
-def restore_latest(cloud: str | Path, outdir: str | Path = "out") -> dict:
+def _client_backup_candidates(outdir: Path) -> list[Path]:
+    folder = outdir / "backups"
+    if not folder.is_dir():
+        return []
+    return sorted(folder.glob("client-collections.*.bak.json"),
+                  key=lambda p: p.stat().st_mtime, reverse=True)
+
+
+def restore_latest(cloud: str | Path | None, outdir: str | Path = "out") -> dict:
     """Undo the last write from the newest backup this tool created."""
+    out = Path(outdir)
+    client_backups = _client_backup_candidates(out)
+    file_backups = _backup_candidates(Path(cloud), out) if cloud else []
+
+    if cefbridge.debugger_available() and client_backups and (
+        not file_backups or client_backups[0].stat().st_mtime >= file_backups[0].stat().st_mtime
+    ):
+        latest_client = client_backups[0]
+        try:
+            snapshot = json.loads(latest_client.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ServiceError(f"客户端备份文件读不出来：{exc}") from exc
+        if not isinstance(snapshot, list):
+            raise ServiceError("客户端备份格式不正确，无法还原。")
+        try:
+            current_managed = cefbridge.list_managed()
+        except (cefbridge.CEFError, OSError) as exc:
+            raise ServiceError(f"读取 Steam 收藏集失败：{exc}") from exc
+
+        snapshot_items = [
+            item for item in snapshot
+            if isinstance(item, dict) and str(item.get("name", "")).startswith(cefbridge.PREFIX)
+        ]
+        snapshot_ids = {str(item["id"]) for item in snapshot_items if item.get("id")}
+        to_delete = [
+            str(item["id"]) for item in current_managed
+            if item.get("id") and str(item["id"]) not in snapshot_ids
+        ]
+        try:
+            if snapshot_items:
+                res = cefbridge.save_many(snapshot_items)
+                failed = [row for row in res if not row.get("ok")]
+                if failed:
+                    raise ServiceError("Steam 客户端未能还原：" + "；".join(
+                        f"{row.get('name', '')}：{row.get('error', '未知错误')}" for row in failed))
+            if to_delete:
+                del_res = cefbridge.delete_many(to_delete)
+                failed_del = [row for row in del_res if not row.get("ok")]
+                if failed_del:
+                    raise ServiceError("Steam 客户端未能删除新增分组：" + "；".join(
+                        f"{row.get('id', '')}：{row.get('error', '未知错误')}" for row in failed_del))
+        except (cefbridge.CEFError, OSError) as exc:
+            raise ServiceError(f"Steam 客户端还原失败：{exc}") from exc
+
+        baseline_path = out / BASELINE_NAME
+        if snapshot_items:
+            baseline_path.write_text(json.dumps(
+                {item["name"][len(cefbridge.PREFIX):]: item.get("added") or [] for item in snapshot_items},
+                ensure_ascii=False, indent=2), encoding="utf-8")
+        elif baseline_path.is_file():
+            baseline_path.unlink()
+        return {"ok": True, "via": "client", "backup": str(latest_client),
+                "restored_to": "Steam 客户端", "index_restored": False}
+
+    if not cloud:
+        raise ServiceError("找不到 Steam 收藏集文件，无法还原。")
     target = Path(cloud)
-    backups = _backup_candidates(target, Path(outdir))
-    if not backups:
+    if not file_backups:
         raise ServiceError("没有找到备份文件，无法还原。")
     if steam_is_running():
         raise ServiceError("Steam 客户端还在运行。请先完全退出 Steam，再点还原。")
-    latest = backups[0]
+    latest = file_backups[0]
     shutil.copy2(latest, target)
     # Also put the cloud revision counter back to the pre-write value.
     marker = "cloud-storage-namespace-1.json."
@@ -395,13 +489,13 @@ def restore_latest(cloud: str | Path, outdir: str | Path = "out") -> dict:
     if latest.name.startswith(marker) and latest.name.endswith(".bak"):
         stamp = latest.name[len(marker):-len(".bak")]
         wanted = f"cloud-storage-namespaces.json.{stamp}.bak"
-        for folder in (target.parent / "backups", Path(outdir) / "backups"):
+        for folder in (target.parent / "backups", out / "backups"):
             candidate = folder / wanted
             if candidate.is_file():
                 shutil.copy2(candidate, target.parent / "cloud-storage-namespaces.json")
                 index_restored = True
                 break
-    return {"ok": True, "backup": str(latest), "restored_to": str(target),
+    return {"ok": True, "via": "file", "backup": str(latest), "restored_to": str(target),
             "index_restored": index_restored}
 
 

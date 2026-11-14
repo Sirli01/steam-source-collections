@@ -21,11 +21,11 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .appinfo import (
-    appids_for_localized_fragment, appinfo_path, first_cjk_fragment,
-    resolve_localized_names,
+    appinfo_path, first_cjk_fragment,
+    resolve_localized_fragments, resolve_localized_names,
 )
 from .licenses import LicenseRecord, classify
-from .local import LocalSteam
+from .local import LocalSteam, discover
 from .matching import CJK_RE, MatchResult, build_index, match_package, normalize
 from .owned import Game
 from .pkgexpand import expand_package_matches
@@ -58,6 +58,34 @@ def _as_pid(value) -> int | None:
         return pid if pid > 0 else None
     except (TypeError, ValueError):
         return None
+
+
+def _parse_bundle_package_apps(raw_pkg_apps) -> tuple[dict[int, list[int]], dict[str, str]]:
+    """Extract package -> appids and app names embedded in an export bundle."""
+    pkg_map: dict[int, list[int]] = {}
+    extra_names: dict[str, str] = {}
+    if not isinstance(raw_pkg_apps, dict):
+        return pkg_map, extra_names
+    for raw_pid, raw_apps in raw_pkg_apps.items():
+        pid = _as_pid(raw_pid)
+        if pid is None or not isinstance(raw_apps, list):
+            continue
+        appids: list[int] = []
+        for entry in raw_apps:
+            if isinstance(entry, dict):
+                aid = _as_int(entry.get("id") or entry.get("appid") or entry.get("app_id"))
+                label = str(entry.get("name") or "").strip()
+                if aid and aid > 0:
+                    appids.append(aid)
+                    if label and str(aid) not in extra_names:
+                        extra_names[str(aid)] = label
+            else:
+                aid = _as_int(entry)
+                if aid and aid > 0:
+                    appids.append(aid)
+        if appids:
+            pkg_map[pid] = list(dict.fromkeys(appids))
+    return pkg_map, extra_names
 
 
 def _guess_pid(name: str, name_to_pid: dict[str, int]) -> int | None:
@@ -140,6 +168,18 @@ def load_bundle(path: str | Path, local: LocalSteam | None = None,
     if not isinstance(raw_licenses, list) or not raw_licenses:
         raise ValueError("导出包里没有许可记录，请确认是在许可页上点的导出按钮")
 
+    bundle_sid = str(data.get("steamid64") or "").strip()
+    if local and local.root and bundle_sid and bundle_sid != local.steamid64:
+        switched = discover(local.root, preferred_steamid64=bundle_sid)
+        local.steamid64 = switched.steamid64
+        local.id3 = switched.id3
+        local.cloud_path = switched.cloud_path
+        local.cloud_format = switched.cloud_format
+        local.collections = switched.collections
+        local.playtimes = switched.playtimes
+        local.package_apps = switched.package_apps
+        local.notes = switched.notes
+
     records: list[LicenseRecord] = []
     explicit_appids: list[list[int]] = []
     explicit_pids: list[int | None] = []
@@ -211,7 +251,12 @@ def load_bundle(path: str | Path, local: LocalSteam | None = None,
     }
 
     # ---------- optional exact alignment from the local Steam cache ----------
-    pkgmap = useful_packages(local.package_apps, owned_set) if local else {}
+    bundle_pkg_raw, bundle_pkg_names = _parse_bundle_package_apps(data.get("package_apps"))
+    for key, label in bundle_pkg_names.items():
+        names.setdefault(key, label)
+    local_pkgmap = useful_packages(local.package_apps, owned_set) if local else {}
+    merged_raw = {**bundle_pkg_raw, **(local.package_apps if local else {})}
+    pkgmap = useful_packages(merged_raw, owned_set) if merged_raw else {}
     name_to_pid: dict[str, int] = {}
     if pkgmap:
         # A package that grants exactly one owned app can be identified by
@@ -274,10 +319,16 @@ def load_bundle(path: str | Path, local: LocalSteam | None = None,
     # the localized names and their appids; use it as an exact lookup table.
     alias_map: dict[str, int] = {}
     cache = appinfo_path(local.root) if local else None
+    cache_bytes = b""
     if cache:
+        try:
+            cache_bytes = cache.read_bytes()
+        except OSError:
+            cache_bytes = b""
+    if cache_bytes:
         wanted = [record.package_name for record in records
                   if CJK_RE.search(record.package_name)]
-        alias_map = resolve_localized_names(cache, wanted, owned_set)
+        alias_map = resolve_localized_names(cache_bytes, wanted, owned_set)
 
     matches: list[MatchResult] = []
     exact_rows = 0
@@ -296,7 +347,7 @@ def load_bundle(path: str | Path, local: LocalSteam | None = None,
                 inferred_rows += 1
             note = ("由本机缓存顺序对齐推定的礼包包精确对应，建议抽查"
                     if from_order else
-                    "由礼包包 → appid 精确对应" + ("（本机 Steam 缓存）" if pkgmap else ""))
+                    "由礼包包 → appid 精确对应" + ("（本机 Steam 缓存）" if local_pkgmap else ""))
             matches.append(MatchResult(
                 games=resolved, via="order" if from_order else "package",
                 score=0.9 if from_order else 1.0, note=note,
@@ -318,15 +369,16 @@ def load_bundle(path: str | Path, local: LocalSteam | None = None,
     expansion = {"expanded_rows": 0, "expanded_apps": 0}
     if pkgmap:
         localized_hits: dict[int, set[int]] = {}
-        if cache:
+        if cache_bytes:
+            row_fragments: dict[int, str] = {}
             for row_index, (record, match) in enumerate(zip(records, matches)):
                 if match.games:
                     continue
                 fragment = first_cjk_fragment(record.package_name)
                 if fragment:
-                    found = appids_for_localized_fragment(cache, fragment, owned_set)
-                    if found:
-                        localized_hits[row_index] = found
+                    row_fragments[row_index] = fragment
+            if row_fragments:
+                localized_hits = resolve_localized_fragments(cache_bytes, row_fragments, owned_set)
         expansion = expand_package_matches(
             records, matches,
             {pid for pid in effective_pids if pid is not None},
@@ -349,12 +401,16 @@ def load_bundle(path: str | Path, local: LocalSteam | None = None,
     if owned_apps and unnamed > owned_apps * 0.25:
         tail = (
             f"已用本机 Steam 缓存把其中 {exact_rows} 行许可精确对齐到游戏，不需要重导。"
-            if pkgmap else
+            if local_pkgmap else
             "可在试用页点「用本机 Steam 缓存补强」，或启动图形界面点「一键统计」自动读取本机缓存补齐。"
         )
         warnings.append(
             f"{unnamed} 款游戏没有名称（多为 DLC / 已下架 / 试玩项目，商店接口不返回名称）；{tail}"
         )
+    account_notes = [
+        note for note in (local.notes if local else [])
+        if "导出包账号" in note
+    ]
     meta = {
         "schema": data.get("schema"),
         "exported_at": data.get("exported_at"),
@@ -370,7 +426,8 @@ def load_bundle(path: str | Path, local: LocalSteam | None = None,
         "order_aligned_rows": inferred_rows,
         "localized_aliases": len(alias_map),
         "localized_matched_rows": localized_rows,
-        "local_cache_packages": len(pkgmap),
+        "local_cache_packages": len(local_pkgmap),
+        "bundle_cache_packages": len(bundle_pkg_raw),
         "bundle_expanded_rows": expansion["expanded_rows"],
         "bundle_expanded_apps": expansion["expanded_apps"],
         "inferred_names": inferred_names,
@@ -380,6 +437,7 @@ def load_bundle(path: str | Path, local: LocalSteam | None = None,
         "license_total": _as_int(data.get("license_total")) or 0,
         "name_source": data.get("name_source") or "",
         "playtime_count": len(playtimes),
+        "account_notes": account_notes,
         "diagnostics": data.get("diagnostics") or {},
         "warnings": warnings,
         "source_file": str(p),

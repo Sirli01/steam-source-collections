@@ -47,7 +47,7 @@ def _html_report(plan: Plan, generated_at: str, notes: list[str]) -> str:
     <span class="tag">{label}</span>
   </div>
   <div class="tools">
-    <button onclick="copyBox('{box_id}')">复制游戏名清单</button>
+    <button onclick="copyBox('{box_id}',this)">复制游戏名清单</button>
     <span class="hint">在 Steam 库里建收藏集时可直接粘贴核对</span>
   </div>
   <div class="list">{esc(chr(10).join(names))}</div>
@@ -75,10 +75,38 @@ def _html_report(plan: Plan, generated_at: str, notes: list[str]) -> str:
                 esc(str(x.get("method_raw", ""))))
             for x in plan.unmatched_licenses[:100]
         )
+        extra_lic = ""
+        if len(plan.unmatched_licenses) > 100:
+            extra_lic = (
+                f'<p class="sub" style="margin-top:8px">…另有 {len(plan.unmatched_licenses) - 100} 行，'
+                "详见 <code>collections_plan.json</code> 或 <code>mapping.csv</code>。</p>"
+            )
         unmatched_lic = (
             "<h2>需要人工复核的许可行</h2>"
             "<table><thead><tr><th>日期</th><th>包名</th><th>获取方式</th></tr></thead>"
-            f"<tbody>{rows}</tbody></table>"
+            f"<tbody>{rows}</tbody></table>{extra_lic}"
+        )
+
+    unmatched_games_html = ""
+    if plan.unmatched_games:
+        g_rows = "".join(
+            "<tr><td>{}</td><td>{}</td><td>{}</td></tr>".format(
+                esc(str(x.get("appid", ""))),
+                esc(str(x.get("name", ""))),
+                esc(str(x.get("note", ""))),
+            )
+            for x in plan.unmatched_games[:100]
+        )
+        extra_g = ""
+        if len(plan.unmatched_games) > 100:
+            extra_g = (
+                f'<p class="sub" style="margin-top:8px">…另有 {len(plan.unmatched_games) - 100} 款，'
+                "详见 <code>collections_plan.json</code> 或 <code>mapping.csv</code>。</p>"
+            )
+        unmatched_games_html = (
+            "<h2>没有许可记录的游戏</h2>"
+            "<table><thead><tr><th>appid</th><th>名称</th><th>说明</th></tr></thead>"
+            f"<tbody>{g_rows}</tbody></table>{extra_g}"
         )
 
     return f"""<!doctype html>
@@ -161,6 +189,7 @@ code{{background:var(--code-bg);padding:1px 5px}}
 <h2>按获取来源分组</h2>
 <div class="grid">{''.join(cards)}</div>
 {unmatched_lic}
+{unmatched_games_html}
 <h2>这份报告是怎么来的</h2>
 <p class="sub" style="margin:0">来源（Steam 商店 / CDK·Key / 免费领取 / 赠礼）来自你在许可页导出的一键包；
 本机 Steam 客户端的 <code>packageinfo.vdf</code> 只提供「礼包包 → 游戏 appid」的身份对照，
@@ -178,13 +207,19 @@ Steam 正在运行时，工具会让 <b>Steam 客户端自己保存并上传到�
 </footer>
 </div>
 <script>
-function copyBox(id){{
+function copyBox(id,btn){{
   var t=document.getElementById(id); if(!t)return;
-  t.style.display='block'; t.select();
-  try{{document.execCommand('copy');}}catch(e){{}}
-  t.style.display='none';
-  var b=window.event&&window.event.target;
-  if(b){{var old=b.textContent;b.textContent='已复制 ✓';setTimeout(function(){{b.textContent=old;}},1400);}}
+  var ok=function(){{
+    if(btn){{var old=btn.textContent;btn.textContent='已复制 ✓';setTimeout(function(){{btn.textContent=old;}},1400);}}
+  }};
+  var fallback=function(){{
+    t.style.display='block'; t.select();
+    try{{document.execCommand('copy');ok();}}catch(e){{}}
+    t.style.display='none';
+  }};
+  if(navigator.clipboard&&navigator.clipboard.writeText){{
+    navigator.clipboard.writeText(t.value).then(ok).catch(fallback);
+  }}else fallback();
 }}
 </script></body></html>
 """

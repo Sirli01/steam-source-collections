@@ -89,22 +89,19 @@ def _nearest_appid(data: bytes, pos: int, owned: set[int]) -> int | None:
     return None
 
 
-def appids_for_localized_fragment(path: str | Path, fragment: str, owned) -> set[int]:
-    """Owned appids whose cached localized name contains ``fragment``.
-
-    Used for Chinese collection names such as ``《巫师 3：狂猎 - 完全版》``:
-    the license page name differs from every English app title, but several
-    apps in that bundle carry a localized name containing ``巫师``. Pointing
-    at one unclaimed package with multiple hits is strong enough evidence.
-    """
+def _load_bytes(path_or_data: str | Path | bytes | bytearray | memoryview) -> bytes:
+    if isinstance(path_or_data, (bytes, bytearray, memoryview)):
+        return bytes(path_or_data)
     try:
-        data = Path(path).read_bytes()
+        return Path(path_or_data).read_bytes()
     except OSError:
-        return set()
+        return b""
+
+
+def _scan_localized_fragment(data: bytes, fragment: str, owned_ids: set[int]) -> set[int]:
     needle = str(fragment or "").encode("utf-8")
     if len(needle) < 4:
         return set()
-    owned_ids = {int(value) for value in owned}
     hits: set[int] = set()
     pos = 0
     while len(hits) <= MAX_HITS_PER_NAME:
@@ -125,23 +122,65 @@ def appids_for_localized_fragment(path: str | Path, fragment: str, owned) -> set
     return hits
 
 
-def resolve_localized_names(path: str | Path, wanted, owned) -> dict[str, int]:
+def appids_for_localized_fragment(path: str | Path | bytes, fragment: str, owned) -> set[int]:
+    """Owned appids whose cached localized name contains ``fragment``.
+
+    Used for Chinese collection names such as ``《巫师 3：狂猎 - 完全版》``:
+    the license page name differs from every English app title, but several
+    apps in that bundle carry a localized name containing ``巫师``. Pointing
+    at one unclaimed package with multiple hits is strong enough evidence.
+    """
+    data = _load_bytes(path)
+    if not data:
+        return set()
+    owned_ids = {int(value) for value in owned}
+    return _scan_localized_fragment(data, fragment, owned_ids)
+
+
+def resolve_localized_fragments(
+    path_or_data: str | Path | bytes,
+    row_fragments: dict[int, str],
+    owned,
+) -> dict[int, set[int]]:
+    """Batch-resolve localized name fragments using a single read of appinfo.vdf."""
+    if not row_fragments:
+        return {}
+    data = _load_bytes(path_or_data)
+    if not data:
+        return {}
+    owned_ids = {int(value) for value in owned}
+    by_fragment: dict[str, list[int]] = {}
+    for row_index, fragment in row_fragments.items():
+        frag = str(fragment or "")
+        if len(frag.encode("utf-8")) >= 4:
+            by_fragment.setdefault(frag, []).append(row_index)
+    out: dict[int, set[int]] = {}
+    for frag, row_indices in by_fragment.items():
+        found = _scan_localized_fragment(data, frag, owned_ids)
+        if found:
+            for row_index in row_indices:
+                out[row_index] = set(found)
+    return out
+
+
+def resolve_localized_names(path: str | Path | bytes, wanted, owned) -> dict[str, int]:
     """Map localized license package names to owned appids.
 
     Only names containing CJK characters are considered, and a mapping is
     accepted only when every occurrence points to the same owned appid.
     Anything ambiguous is left unmatched on purpose.
     """
-    try:
-        data = Path(path).read_bytes()
-    except OSError:
+    data = _load_bytes(path)
+    if not data:
         return {}
     owned_ids = {int(value) for value in owned}
     result: dict[str, int] = {}
+    seen_labels: set[str] = set()
     for raw_name in wanted:
         label = str(raw_name or "").strip()
-        if not label or len(label) > 60 or not CJK_RE.search(label):
+        if not label or label in seen_labels or len(label) > 60 or not CJK_RE.search(label):
             continue
+        seen_labels.add(label)
         needle = label.encode("utf-8")
         hits: set[int] = set()
         pos = 0

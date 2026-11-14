@@ -241,12 +241,16 @@ def steam_is_running() -> bool | None:
     return _steam_is_running()
 
 
-def preview(path: Path, plan: Plan) -> dict:
+def _groups_to_write(plan: Plan, include_cross: bool = False) -> list[dict]:
+    allowed = ("source", "cross") if include_cross else ("source",)
+    return [g for g in plan.groups if g.get("kind") in allowed and g.get("appids")]
+
+
+def preview(path: Path, plan: Plan, include_cross: bool = False) -> dict:
     schema, entries = read_collections(path)
     common = {
         "collections_to_write": [
-            PREFIX + group["name"] for group in plan.groups
-            if group.get("kind") == "source" and group.get("appids")
+            PREFIX + group["name"] for group in _groups_to_write(plan, include_cross)
         ],
     }
     if schema == "kv-pairs":
@@ -297,7 +301,8 @@ def preview(path: Path, plan: Plan) -> dict:
     }
 
 
-def _write_kv_pairs(path: Path, plan: Plan, outdir: Path) -> list[Path]:
+def _write_kv_pairs(path: Path, plan: Plan, outdir: Path,
+                    include_cross: bool = False) -> list[Path]:
     """Append-only write for the modern ``[key, meta]`` collection store.
 
     Existing entries are never edited. Only ``[来源] `` keys previously
@@ -335,14 +340,14 @@ def _write_kv_pairs(path: Path, plan: Plan, outdir: Path) -> list[Path]:
             managed.add(key)
     data = [item for item in raw if item[0] not in managed]
 
-    source_groups = [g for g in plan.groups if g.get("kind") == "source"]
-    if not source_groups:
-        raise WritebackError("计划里没有来源分组，拒绝写入")
+    target_groups = _groups_to_write(plan, include_cross)
+    if not target_groups:
+        raise WritebackError("计划里没有可写入的来源分组，拒绝写入")
     alphabet = string.ascii_letters + string.digits
     now = int(datetime.now().timestamp())
     created: list[str] = []
     version = max_version
-    for group in source_groups:
+    for group in target_groups:
         appids = sorted({int(a) for a in group["appids"] if str(a).isdigit()})
         if not appids:
             continue
@@ -364,7 +369,7 @@ def _write_kv_pairs(path: Path, plan: Plan, outdir: Path) -> list[Path]:
         }])
         created.append(PREFIX + group["name"])
     if not created:
-        raise WritebackError("所有来源分组都是空的，拒绝写入")
+        raise WritebackError("所有可写入分组都是空的，拒绝写入")
 
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     backup_roots = [path.parent / "backups", outdir / "backups"]
@@ -405,10 +410,10 @@ def _write_kv_pairs(path: Path, plan: Plan, outdir: Path) -> list[Path]:
     return backups
 
 
-def apply(path: Path, plan: Plan, outdir: Path) -> list[Path]:
+def apply(path: Path, plan: Plan, outdir: Path, include_cross: bool = False) -> list[Path]:
     schema, _ = read_collections(path)
     if schema == "kv-pairs":
-        return _write_kv_pairs(path, plan, outdir)
+        return _write_kv_pairs(path, plan, outdir, include_cross=include_cross)
     data = json.loads(path.read_text(encoding="utf-8-sig"))
     found = _find_container(data)
     if not found:
@@ -423,7 +428,10 @@ def apply(path: Path, plan: Plan, outdir: Path) -> list[Path]:
     ]:
         del container[key]
 
-    for group in plan.groups:
+    target_groups = _groups_to_write(plan, include_cross)
+    if not target_groups:
+        raise WritebackError("所有可写入分组都是空的，拒绝写入")
+    for group in target_groups:
         appids = [appid if use_int else str(appid) for appid in group["appids"]]
         container[f"src_{group['id']}"] = {
             name_key: PREFIX + group["name"],
@@ -439,14 +447,5 @@ def apply(path: Path, plan: Plan, outdir: Path) -> list[Path]:
         backup.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(path, backup)
 
-    handle = tempfile.NamedTemporaryFile(
-        "w", encoding="utf-8", dir=path.parent, prefix=".ssc-", suffix=".tmp", delete=False
-    )
-    try:
-        with handle:
-            json.dump(data, handle, ensure_ascii=False, indent=2)
-        os.replace(handle.name, path)
-    finally:
-        if os.path.exists(handle.name):
-            os.unlink(handle.name)
+    _atomic_replace_json(path, data)
     return backups

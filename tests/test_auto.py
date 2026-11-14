@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 from steam_source_collections.bundle import load_bundle
 from steam_source_collections.local import (
-    LocalSteam, read_collections, read_playtimes, read_steamid64,
+    STEAMID64_BASE, LocalSteam, discover, read_collections, read_playtimes, read_steamid64,
 )
 from steam_source_collections.plan import build_plan
 from steam_source_collections.writeback import WritebackError, apply, preview
@@ -132,6 +132,45 @@ class BundleTests(unittest.TestCase):
             self.assertEqual(len(b.meta["warnings"]), 2)
             self.assertIn("分页", b.meta["warnings"][0])
             self.assertIn("没有名称", b.meta["warnings"][1])
+
+    def test_discover_switches_account_by_preferred_steamid64(self):
+        sid1 = "76561198000000001"
+        sid2 = "76561198000000002"
+        id3_1 = str(int(sid1) - STEAMID64_BASE)
+        id3_2 = str(int(sid2) - STEAMID64_BASE)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "config").mkdir(parents=True)
+            (root / "config/loginusers.vdf").write_text(
+                f'"users"\n{{\n\t"{sid1}"\n\t{{\n\t\t"MostRecent"\t\t"0"\n\t}}\n'
+                f'\t"{sid2}"\n\t{{\n\t\t"MostRecent"\t\t"1"\n\t}}\n}}',
+                encoding="utf-8",
+            )
+            (root / "userdata" / id3_1 / "config").mkdir(parents=True)
+            (root / "userdata" / id3_2 / "config").mkdir(parents=True)
+            info = discover(root, preferred_steamid64=sid1)
+            self.assertEqual(info.steamid64, sid1)
+            self.assertEqual(info.id3, id3_1)
+            self.assertTrue(any("已自动匹配到导出包所属的 Steam 账号目录" in n for n in info.notes))
+
+    def test_bundle_uses_embedded_package_apps_without_local_cache(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / "bundle.json"
+            p.write_text(json.dumps({
+                "licenses": [
+                    {"date": "2025-01-01", "name": "Some Package",
+                     "method": "Steam 商店", "packageid": 77001},
+                ],
+                "owned_appids": [9001],
+                "app_names": {},
+                "package_apps": {"77001": [{"id": 9001, "name": "Embedded Hit"}]},
+            }), encoding="utf-8")
+            b = load_bundle(p, local=None)
+            self.assertEqual(b.matches[0].via, "package")
+            self.assertEqual([g.appid for g in b.matches[0].games], [9001])
+            self.assertEqual(b.games[0].name, "Embedded Hit")
+            self.assertEqual(b.meta["local_cache_packages"], 0)
+            self.assertEqual(b.meta["bundle_cache_packages"], 1)
 
 
 class NewFormatWritebackTests(unittest.TestCase):

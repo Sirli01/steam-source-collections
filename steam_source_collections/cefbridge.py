@@ -265,6 +265,48 @@ def save_many(items: list[dict], timeout: float = 40.0) -> list[dict]:
     return evaluate(expression, timeout=timeout) or []
 
 
+def delete_many(ids: list[str], prefix: str = PREFIX, timeout: float = 20.0) -> list[dict]:
+    """Delete collections previously created by this tool inside the client."""
+    clean_ids = [str(cid) for cid in ids if cid]
+    if not clean_ids:
+        return []
+    expression = """
+(async function() {
+  const ids = %s;
+  const prefix = %s;
+  const cs = window.collectionStore;
+  const out = [];
+  for (const id of ids) {
+    try {
+      const col = cs.GetCollection(id);
+      if (!col) { out.push({id, ok: true, skipped: true}); continue; }
+      if (!String(col.m_strName || '').startsWith(prefix)) {
+        out.push({id, ok: false, error: 'refused non-managed collection'});
+        continue;
+      }
+      if (typeof cs.DeleteCollection === 'function') {
+        await cs.DeleteCollection(col);
+      } else if (typeof col.Delete === 'function') {
+        await col.Delete();
+      } else if (cs.m_cloudStorageMap && typeof cs.m_cloudStorageMap.RemoveObject === 'function') {
+        await cs.m_cloudStorageMap.RemoveObject(id);
+      } else {
+        await cs.m_cloudStorageMap.DeleteObject(id);
+      }
+      out.push({id, ok: true});
+    } catch (e) {
+      out.push({id, ok: false, error: String(e && e.message || e)});
+    }
+  }
+  return out;
+})()
+""" % (
+        json.dumps(clean_ids, ensure_ascii=False),
+        json.dumps(prefix, ensure_ascii=False),
+    )
+    return evaluate(expression, timeout=timeout) or []
+
+
 def touch_managed(prefix: str = PREFIX) -> list[dict]:
     """Re-save existing collections unchanged, purely to trigger a cloud upload.
 

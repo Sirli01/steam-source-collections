@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .licenses import LicenseRecord
+from .licenses import LicenseRecord, normalize_date
 from .matching import MatchResult, normalize
 from .owned import Game
 
@@ -57,8 +57,8 @@ def _should_replace(old: dict, new: dict, conflict: str) -> bool:
     if new.get("match_via") == "order" and old.get("match_via") not in ("order", "none"):
         return False
     if conflict == "latest":
-        return (new.get("date", ""), PRIORITY.get(new["group"], 0)) >= (
-            old.get("date", ""),
+        return (normalize_date(new.get("date", "")), PRIORITY.get(new["group"], 0)) >= (
+            normalize_date(old.get("date", "")),
             PRIORITY.get(old["group"], 0),
         )
     return PRIORITY.get(new["group"], 0) > PRIORITY.get(old["group"], 0)

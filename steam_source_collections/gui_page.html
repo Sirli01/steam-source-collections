@@ -283,6 +283,13 @@ body.dragging .drop{display:grid}
       <button class="btn ghost" id="btnRescan">重新检测文件</button>
       <button class="btn ghost" id="btnLastReport" style="display:none">打开上次的报告</button>
     </div>
+    <details class="sub-tools"><summary>统计与写入选项（可选）</summary>
+      <div style="margin-top:10px;display:grid;gap:8px">
+        <label class="check" style="margin:0;font-size:12.5px"><input type="checkbox" id="optInferOrder" checked><span>启用本机缓存顺序对齐（推荐）</span></label>
+        <label class="check" style="margin:0;font-size:12.5px"><input type="checkbox" id="optConflictLatest"><span>同一游戏多条许可时按最新日期优先（默认付费优先）</span></label>
+        <label class="check" style="margin:0;font-size:12.5px"><input type="checkbox" id="optWriteCross"><span>写入 Steam 时同时创建交叉分组（吃灰区 / 真的玩过 / 付费未启动）</span></label>
+      </div>
+    </details>
     <div id="frameBox" style="display:none">
       <iframe class="report-frame" id="reportFrame" title="完整分组报告"></iframe>
     </div>
@@ -430,15 +437,24 @@ async function analyse(){
     return;
   }
   busy("btnAnalyse",true,"正在统计…");note("开始一键统计");
-  try{const d=await api("/api/report",{});renderResult(d);renderState(d.state);}
+  try{
+    const opt={
+      infer_order:$("optInferOrder").checked,
+      conflict:$("optConflictLatest").checked?"latest":"priority",
+      include_cross:$("optWriteCross").checked
+    };
+    const d=await api("/api/report",opt);
+    renderResult(d);renderState(d.state);
+  }
   catch(e){note("✗ "+e.message,"warn");modal({title:"统计没完成",html:`<p>${esc(e.message)}</p>`,
     okText:"知道了",onConfirm:async()=>{},check:null});}
   finally{busy("btnAnalyse",false);}
 }
 async function applyModal(recheck){
   if(!latest)return;
+  const includeCross=$("optWriteCross").checked;
   let pre;
-  try{const d=await api("/api/preflight",{});pre=d.preflight;latest.preflight=pre;
+  try{const d=await api("/api/preflight",{include_cross:includeCross});pre=d.preflight;latest.preflight=pre;
     if(d.running && pre.via!=="client"){
       modal({title:"请先退出 Steam",
         html:`<p>${recheck?"检测到 Steam 仍在运行——你还没有关闭它。":"当前 Steam 没有开启本机接口，只能写入本机文件；这时需要先退出 Steam。"}</p>
@@ -461,10 +477,11 @@ async function applyModal(recheck){
     check:"我确认写入 Steam 收藏集",
     okText:"确认写入",
     onConfirm:async()=>{busy("btnApply",true,"正在写入…");
-      try{const d=await api("/api/apply",{confirm:true});
-        note("✅ 已写入 "+d.collections.length+" 个收藏集；备份："+d.backups[0],"ok");
+      try{const d=await api("/api/apply",{confirm:true,include_cross:includeCross});
+        const bak=(d.backups&&d.backups[0])?("；备份："+d.backups[0]):"";
+        note("✅ 已写入 "+d.collections.length+" 个收藏集"+bak,"ok");
         modal({title:"写入完成",html:`<p>已${d.via==="client"?"通过 Steam 客户端保存":"写入 Steam 收藏集文件"} ${d.collections.length} 个分组。</p>
-          <div class="hint">${d.via==="client"?"Steam 正在自动同步到账号，Steam Deck 稍等即可看到，不需要退出或重启 Steam；如果 Deck 上没立刻刷新，切换一下库页面。":"现在重新启动 Steam，等 1～2 分钟让新分组上传到账号；Steam Deck 上完全退出 Steam 再打开。若 Steam 提示云同步冲突，选择保留本机版本。"} 想撤销的话，退出 Steam 后点主界面的「一键还原」。</div>`,
+          <div class="hint">${d.via==="client"?"Steam 正在自动同步到账号，Steam Deck 稍等即可看到，不需要退出或重启 Steam；如果 Deck 上没立刻刷新，切换一下库页面。想撤销的话，直接在主界面点「一键还原」。":"现在重新启动 Steam，等 1～2 分钟让新分组上传到账号；Steam Deck 上完全退出 Steam 再打开。若 Steam 提示云同步冲突，选择保留本机版本。想撤销的话，退出 Steam 后点主界面的「一键还原」。"}</div>`,
           okText:"好",onConfirm:async()=>{}});
         renderState(d.state);
       }catch(e){note("✗ "+e.message,"warn");

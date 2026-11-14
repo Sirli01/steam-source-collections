@@ -31,9 +31,18 @@
     alert('请先打开并登录 https://store.steampowered.com/account/licenses/ ，再点「导出许可数据」。');
     return;
   }
+  if (window.__sscRunning) {
+    return;
+  }
+  var oldPanel = document.getElementById('ssc-panel');
+  if (oldPanel && oldPanel.parentNode) {
+    oldPanel.parentNode.removeChild(oldPanel);
+  }
+  var IS_USERSCRIPT = typeof GM_info !== 'undefined';
 
   // ---------- 悬浮面板 ----------
   var panel = document.createElement('div');
+  panel.id = 'ssc-panel';
   panel.style.cssText = 'position:fixed;z-index:2147483647;top:18px;right:18px;width:380px;' +
     'background:#182230;color:#eaf0f8;border:1px solid #3a4a60;border-radius:12px;' +
     'padding:15px 16px;box-shadow:0 12px 40px rgba(0,0,0,.45);' +
@@ -113,7 +122,8 @@
   }
   function declaredTotal(doc) {
     var c = doc.querySelector('.license_paginator_ctn');
-    var m = (c ? c.textContent || '' : '').match(/共\s*(\d+)\s*个/);
+    var text = (c ? c.textContent || '' : '').replace(/,/g, '');
+    var m = text.match(/共\s*(\d+)\s*[个個項项]/) || text.match(/\bof\s+(\d+)\b/i);
     return m ? Number(m[1]) : 0;
   }
 
@@ -141,7 +151,7 @@
     absorb(rowsOf(doc));
     var url = nextHref(doc);
     var stall = 0, stopReason = 'no-next-link';
-    while (url && pages < 120) {
+    while (url && pages < 500) {
       if (visited[url]) { stopReason = 'paginator-loop'; break; }
       visited[url] = 1;
       var res = await fetch(url, { credentials: 'include' });
@@ -384,7 +394,7 @@
   }
 
   // ---------- 主流程 ----------
-  (async function run() {
+  async function run() {
     say('准备中：读取登录态配置…', 2);
     var cfg = await loadConfig();
 
@@ -510,7 +520,31 @@
       (fam.diag !== 'ok' ? '家庭共享接口本次没读到（' + fam.diag + '），⑤ 组仍可手动填清单。\n' : '') +
       '下一步：把下载的文件拖进「Steam 收藏集分组」的图形界面或试用页，结果会立刻出现（不用敲命令）。', 100);
     download(payload);
-  })().catch(function (err) {
-    say('出错了：' + (err && err.message ? err.message : err) + '\n可以刷新许可页后重试。', 100);
-  });
+  }
+
+  function startExport() {
+    if (window.__sscRunning) return;
+    window.__sscRunning = true;
+    run().catch(function (err) {
+      say('出错了：' + (err && err.message ? err.message : err) + '\n可以刷新许可页后重试。', 100);
+    }).then(function () {
+      window.__sscRunning = false;
+    });
+  }
+
+  if (IS_USERSCRIPT) {
+    say('已就绪：点击下方按钮开始抓取并导出全部许可数据。', 0);
+    var startBtn = document.createElement('button');
+    startBtn.id = 'ssc-start-btn';
+    startBtn.textContent = '开始导出许可数据';
+    startBtn.style.cssText = 'margin-top:10px;width:100%;padding:8px 12px;border:0;border-radius:6px;' +
+      'background:#5b9bff;color:#0f172a;font-weight:700;font-size:13px;cursor:pointer';
+    startBtn.onclick = function () {
+      if (startBtn.parentNode) startBtn.parentNode.removeChild(startBtn);
+      startExport();
+    };
+    panel.insertBefore(startBtn, panel.querySelector('#ssc-bar'));
+  } else {
+    startExport();
+  }
 })();

@@ -46,6 +46,49 @@ CLASS_RE = re.compile(r"class\s*=\s*[\"']([^\"']*)[\"']", re.I)
 TAG_RE = re.compile(r"<[^>]+>")
 REMOVE_LINK_RE = re.compile(r"<a\b[^>]*free_license_remove_link[^>]*>.*?</a>", re.I | re.S)
 
+MONTHS: dict[str, int] = {
+    "jan": 1, "january": 1,
+    "feb": 2, "february": 2,
+    "mar": 3, "march": 3,
+    "apr": 4, "april": 4,
+    "may": 5,
+    "jun": 6, "june": 6,
+    "jul": 7, "july": 7,
+    "aug": 8, "august": 8,
+    "sep": 9, "sept": 9, "september": 9,
+    "oct": 10, "october": 10,
+    "nov": 11, "november": 11,
+    "dec": 12, "december": 12,
+}
+_YMD_RE = re.compile(r"(\d{4})\s*[-/.年]\s*(\d{1,2})\s*[-/.月]\s*(\d{1,2})")
+_DMY_EN_RE = re.compile(r"\b(\d{1,2})\s+([A-Za-z]{3,9})[.,]?\s+(\d{4})\b")
+_MDY_EN_RE = re.compile(r"\b([A-Za-z]{3,9})[.,]?\s+(\d{1,2})[,\s]+(\d{4})\b")
+
+
+def normalize_date(raw: str) -> str:
+    """Normalize localized Steam license dates into YYYY-MM-DD for sorting."""
+    text = (raw or "").strip()
+    if not text:
+        return ""
+    m = _YMD_RE.search(text)
+    if m:
+        y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        if 1 <= mo <= 12 and 1 <= d <= 31:
+            return f"{y:04d}-{mo:02d}-{d:02d}"
+    m = _DMY_EN_RE.search(text)
+    if m:
+        mo = MONTHS.get(m.group(2).casefold())
+        d, y = int(m.group(1)), int(m.group(3))
+        if mo and 1 <= d <= 31:
+            return f"{y:04d}-{mo:02d}-{d:02d}"
+    m = _MDY_EN_RE.search(text)
+    if m:
+        mo = MONTHS.get(m.group(1).casefold())
+        d, y = int(m.group(2)), int(m.group(3))
+        if mo and 1 <= d <= 31:
+            return f"{y:04d}-{mo:02d}-{d:02d}"
+    return text
+
 
 @dataclass(frozen=True)
 class LicenseRecord:

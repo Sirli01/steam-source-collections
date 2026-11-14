@@ -15,6 +15,7 @@ from .matching import build_index, match_package
 from .owned import fetch_owned, load_family, load_owned
 from .plan import build_plan
 from .report import write_outputs
+from .service import build_notes
 from .writeback import (
     WritebackError,
     apply as writeback_apply,
@@ -137,39 +138,7 @@ def main(argv: list[str] | None = None) -> int:
             conflict=args.conflict, extra_groups=not args.no_extra_groups,
         )
         outdir = Path(args.out)
-        notes: list[str] = []
-        if bundle_meta.get("local_cache_packages"):
-            notes.append(
-                f"已只读解析本机 Steam 的 packageinfo.vdf："
-                f"{bundle_meta['local_cache_packages']} 个礼包包、"
-                f"{bundle_meta['explicit_appid_rows']} 行许可精确对齐到 appid，"
-                f"并补回 {bundle_meta.get('inferred_names', 0)} 个显示名称。"
-            )
-        if bundle_meta.get("order_aligned_rows"):
-            notes.append(
-                f"其中 {bundle_meta['order_aligned_rows']} 行的 packageid 由"
-                "「许可页新→旧 / 本机包列表旧→新」的顺序对齐推定，属于间接证据："
-                "在 mapping.csv 里筛 match_via=order 可逐条复核，加 --no-order-infer 可完全关闭。"
-            )
-        if bundle_meta.get("unnamed_apps"):
-            notes.append(
-                f"{bundle_meta['unnamed_apps']} 款游戏没有名称，多为 DLC / 已下架 / 试玩项目，"
-                "商店接口本来就不返回；重新导出也补不回来，已尽量按礼包包归组。"
-            )
-        if bundle_meta.get("family_apps"):
-            group = bundle_meta.get("family_groupid")
-            notes.append(
-                f"⑤ 家庭共享：Steam 家庭组接口读到 "
-                f"{bundle_meta['family_apps']} 款家人借给你的游戏"
-                + (f"（家庭组 {group}）" if group else "")
-                + "。这些游戏不会出现在你的许可页里，属于正常情况，不算缺许可。"
-            )
-        elif bundle_path:
-            notes.append(
-                "⑤ 家庭共享：这份导出包不含共享游戏清单（许可页与 GetOwnedGames 都只列出"
-                "自己拥有的游戏）。用界面最上面的「查看导出步骤 / 重新导出」重新导出一次即可自动"
-                "填好 ⑤ 组；也可用 --family-file 手动给一份清单。"
-            )
+        notes = build_notes(bundle_meta) if bundle_path else []
         outputs = write_outputs(
             plan, outdir,
             Path(bundle_path).name if bundle_path else Path(args.licenses).name,

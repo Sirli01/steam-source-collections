@@ -46,6 +46,12 @@ class MergePlanTests(unittest.TestCase):
         self.assertEqual(items[0]["added"], [1001, 1002])
         self.assertTrue(items[0]["id"].startswith("uc-"))
 
+    def test_include_cross_groups_when_enabled(self):
+        items = service.merge_plan_with_client(plan(), [], include_cross=True)
+        self.assertEqual(len(items), 3)
+        self.assertEqual(items[2]["name"], PREFIX + "③b 吃灰区")
+        self.assertEqual(items[2]["added"], [3001])
+
     def test_manual_add_and_remove_are_preserved(self):
         existing = [
             {"id": "uc-A", "name": PREFIX + "① Steam 商店购买",
@@ -141,6 +147,50 @@ class ClientWriteFlowTests(unittest.TestCase):
             status.assert_not_called()
             self.assertEqual(len(saved), 2)
             self.assertTrue((Path(tmp) / service.BASELINE_NAME).is_file())
+
+    def test_client_write_creates_snapshot_and_restore_rolls_back(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            existing_before = [
+                {"id": "uc-old", "name": PREFIX + "① Steam 商店购买",
+                 "added": [999], "removed": []},
+            ]
+            with patch.object(cefbridge, "list_managed", return_value=existing_before), \
+                 patch.object(cefbridge, "save_many",
+                              side_effect=lambda items: [
+                                  {"id": item["id"], "name": item["name"], "ok": True}
+                                  for item in items]):
+                write_res = service.client_write_plan(analysis(), tmp)
+            self.assertEqual(len(write_res["backups"]), 1)
+            bak_path = Path(write_res["backups"][0])
+            self.assertTrue(bak_path.is_file())
+            self.assertIn("client-collections.", bak_path.name)
+
+            existing_after = [
+                {"id": "uc-old", "name": PREFIX + "① Steam 商店购买",
+                 "added": [999, 1001, 1002], "removed": []},
+                {"id": "uc-new", "name": PREFIX + "② CDK·Key 激活",
+                 "added": [2001], "removed": []},
+            ]
+            restored_saved = []
+            deleted_ids = []
+            with patch.object(cefbridge, "debugger_available", return_value=True), \
+                 patch.object(cefbridge, "list_managed", return_value=existing_after), \
+                 patch.object(cefbridge, "save_many",
+                              side_effect=lambda items: (
+                                  restored_saved.extend(items) or
+                                  [{"id": item["id"], "name": item["name"], "ok": True}
+                                   for item in items])), \
+                 patch.object(cefbridge, "delete_many",
+                              side_effect=lambda ids: (
+                                  deleted_ids.extend(ids) or
+                                  [{"id": cid, "ok": True} for cid in ids])):
+                restore_res = service.restore_latest(None, tmp)
+            self.assertTrue(restore_res["ok"])
+            self.assertEqual(restore_res["via"], "client")
+            self.assertEqual(len(restored_saved), 1)
+            self.assertEqual(restored_saved[0]["id"], "uc-old")
+            self.assertEqual(restored_saved[0]["added"], [999])
+            self.assertEqual(deleted_ids, ["uc-new"])
 
 
 if __name__ == "__main__":

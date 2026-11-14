@@ -25,8 +25,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import __version__
-from . import service
+from . import __version__, cefbridge, service
 from .service import ServiceError
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -206,15 +205,21 @@ class Handler(BaseHTTPRequestHandler):
         state = self.state
         if path == "/api/report":
             state.log("一键统计开始")
+            conflict = str(body.get("conflict") or "priority")
+            if conflict not in ("priority", "latest"):
+                conflict = "priority"
+            include_cross = bool(body.get("include_cross", False))
             analysis = service.analyse(
                 bundle_path=body.get("bundle") or state.bundle_path(),
                 outdir=state.outdir,
-                infer_order=body.get("infer_order", True),
+                infer_order=bool(body.get("infer_order", True)),
+                conflict=conflict,
+                include_cross=include_cross,
             )
             state.analysis = analysis
             state.local = analysis.local
             state.log(f"统计完成：{analysis.plan.stats['games_total']} 款游戏")
-            pre = service.preflight(analysis)
+            pre = service.preflight(analysis, include_cross=include_cross)
             return {
                 "meta": {
                     "license_rows": analysis.meta["license_rows"],
@@ -237,28 +242,35 @@ class Handler(BaseHTTPRequestHandler):
             # clicked the write button. No polling, no background work.
             if state.analysis is None:
                 raise ServiceError("请先点「一键统计」，再写入 Steam。")
-            return {"preflight": service.preflight(state.analysis),
+            include_cross = body.get("include_cross")
+            if include_cross is not None:
+                include_cross = bool(include_cross)
+            return {"preflight": service.preflight(state.analysis, include_cross=include_cross),
                     "running": service.steam_status()}
         if path == "/api/apply":
             if state.analysis is None:
                 raise ServiceError("请先点「一键统计」，再写入 Steam。")
+            include_cross = body.get("include_cross")
+            if include_cross is not None:
+                include_cross = bool(include_cross)
             # The client channel writes through the running Steam client and
             # uploads itself; only the file fallback needs Steam closed.
-            if service.preflight(state.analysis).get("via") != "client" \
+            if service.preflight(state.analysis, include_cross=include_cross).get("via") != "client" \
                     and service.steam_status():
                 raise ServiceError(
                     "Steam 客户端还在运行，而且没有开启本机调试接口——你还没有关闭 Steam。"
                     "请改用文件方式写入：在托盘图标右键 → 退出，再点一次写入。")
             state.log("写入 Steam 收藏集")
             result = service.apply_plan(state.analysis, state.outdir,
-                                        confirm=bool(body.get("confirm")))
+                                        confirm=bool(body.get("confirm")),
+                                        include_cross=include_cross)
             state.log("写入完成：" + "、".join(result["collections"]))
             return {**result, "state": self._state(False)}
         if path == "/api/restore":
             cloud = service.discover().cloud_path
-            if not cloud:
+            if not cloud and not cefbridge.debugger_available():
                 raise ServiceError("找不到 Steam 收藏集文件，无法还原。")
-            state.log("还原收藏集文件")
+            state.log("还原收藏集")
             result = service.restore_latest(cloud, state.outdir)
             state.log("还原完成：" + result["backup"])
             return {**result, "state": self._state(False)}

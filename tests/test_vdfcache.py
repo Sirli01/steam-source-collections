@@ -93,6 +93,30 @@ class OrderAlignmentTests(unittest.TestCase):
         self.assertFalse(_should_replace(old, new, "priority"))
         self.assertTrue(_should_replace({"group": "unknown", "match_via": "none"}, new, "priority"))
 
+    def test_order_alignment_score_is_below_direct_evidence(self):
+        from steam_source_collections.local import LocalSteam
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "bundle.json"
+            licenses = [
+                {"date": "2026-01-01", "name": f"Row {i}", "method": "Steam 商店",
+                 **({"packageid": str(pkg)} if i != 1 else {})}
+                for i, pkg in enumerate([80, 70, 60, 50, 40, 30, 10])
+            ]
+            path.write_text(json.dumps({
+                "licenses": licenses,
+                "owned_appids": [100, 300, 400, 500, 600, 700, 800],
+                "owned_packages": [10, 30, 40, 50, 60, 70, 80],
+                "app_names": {},
+            }), encoding="utf-8")
+            local = LocalSteam(package_apps={p: [p * 10] for p in (10, 30, 40, 50, 60, 70, 80)})
+            bundle = load_bundle(path, local)
+            self.assertEqual(bundle.matches[1].via, "order")
+            self.assertGreaterEqual(bundle.matches[1].score, 0.6)
+            self.assertLessEqual(bundle.matches[1].score, 0.7)
+            strict = load_bundle(path, local, infer_order=False)
+            self.assertEqual(strict.matches[1].via, "none")
+
 
 class WarningWordingTests(unittest.TestCase):
     def test_multipage_export_is_not_called_a_pagination_failure(self):

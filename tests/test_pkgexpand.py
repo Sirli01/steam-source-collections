@@ -124,6 +124,23 @@ class PackageExpandTests(unittest.TestCase):
         )
         self.assertEqual(result["expanded_rows"], 0)
 
+    def test_name_matched_edition_expands_unclaimed_package_siblings(self):
+        rec, matches, games, names, _ = fixture(
+            "Middle-earth: Shadow of War Definitive Edition",
+            {
+                356190: "Middle-earth™: Shadow of War™",
+                866850: "Middle-earth: Shadow of War Definitive Edition Content",
+            },
+        )
+        matches[0] = MatchResult(games=[games[866850]], via="fuzzy", score=0.918)
+        result = expand_package_matches(
+            [rec], matches, set(), {281112: [356190, 866850]}, names, games
+        )
+        self.assertEqual(result["expanded_rows"], 1)
+        self.assertEqual(result["expanded_apps"], 1)
+        self.assertEqual({g.appid for g in matches[0].games}, {356190, 866850})
+        self.assertEqual(matches[0].via, "bundle")
+
 
 if __name__ == "__main__":
     unittest.main()

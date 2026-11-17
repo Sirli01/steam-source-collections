@@ -37,10 +37,28 @@ def _html_report(plan: Plan, generated_at: str, notes: list[str]) -> str:
         if not names:
             names = [f"App {a}" for a in group["appids"]]
         listing = "\n".join(names)
+        if games:
+            items_html = "".join(
+                '<div class="item" data-search="{}"><span>{}</span>{}</div>'.format(
+                    esc(f"{g.get('name', '')} {g.get('appid', '')}".lower()),
+                    esc(str(g.get("name") or f"App {g.get('appid', '?')}")),
+                    ('<em class="badge-missing">无商店记录</em>'
+                     if str(g.get("name") or "").startswith("App ")
+                     else f'<span class="aid">#{esc(str(g.get("appid", "")))}</span>'),
+                )
+                for g in games
+            )
+        else:
+            items_html = "".join(
+                '<div class="item" data-search="{}"><span>{}</span></div>'.format(
+                    esc(name.lower()), esc(name)
+                )
+                for name in names
+            )
         box_id = f"box-{idx}"
         kind = "cross" if group.get("kind") == "cross" else "source"
         label = "交叉组" if kind == "cross" else "来源组"
-        return f"""<section class="card {kind}">
+        return f"""<section class="card {kind}" data-total="{len(group['appids'])}">
   <div class="card-head">
     <h3>{esc(str(group['name']))}</h3>
     <span class="count">{len(group['appids'])} 款</span>
@@ -50,7 +68,7 @@ def _html_report(plan: Plan, generated_at: str, notes: list[str]) -> str:
     <button onclick="copyBox('{box_id}',this)">复制游戏名清单</button>
     <span class="hint">在 Steam 库里建收藏集时可直接粘贴核对</span>
   </div>
-  <div class="list">{esc(chr(10).join(names))}</div>
+  <div class="list">{items_html}</div>
   <textarea id="{box_id}" class="hidden">{esc(listing)}</textarea>
 </section>"""
 
@@ -70,9 +88,10 @@ def _html_report(plan: Plan, generated_at: str, notes: list[str]) -> str:
     unmatched_lic = ""
     if plan.unmatched_licenses:
         rows = "".join(
-            "<tr><td>{}</td><td>{}</td><td>{}</td></tr>".format(
+            '<tr data-search="{}"><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>'.format(
+                esc(f"{x.get('package_name', '')} {x.get('method_raw', '')} {x.get('date', '')}".lower()),
                 esc(str(x.get("date", ""))), esc(str(x.get("package_name", ""))),
-                esc(str(x.get("method_raw", ""))))
+                esc(str(x.get("method_raw", ""))), esc(str(x.get("note", ""))))
             for x in plan.unmatched_licenses[:100]
         )
         extra_lic = ""
@@ -83,14 +102,15 @@ def _html_report(plan: Plan, generated_at: str, notes: list[str]) -> str:
             )
         unmatched_lic = (
             "<h2>需要人工复核的许可行</h2>"
-            "<table><thead><tr><th>日期</th><th>包名</th><th>获取方式</th></tr></thead>"
+            "<table><thead><tr><th>日期</th><th>包名</th><th>获取方式</th><th>说明</th></tr></thead>"
             f"<tbody>{rows}</tbody></table>{extra_lic}"
         )
 
     unmatched_games_html = ""
     if plan.unmatched_games:
         g_rows = "".join(
-            "<tr><td>{}</td><td>{}</td><td>{}</td></tr>".format(
+            '<tr data-search="{}"><td>{}</td><td>{}</td><td>{}</td></tr>'.format(
+                esc(f"{x.get('appid', '')} {x.get('name', '')}".lower()),
                 esc(str(x.get("appid", ""))),
                 esc(str(x.get("name", ""))),
                 esc(str(x.get("note", ""))),
@@ -163,9 +183,20 @@ h2{{font-size:19px;font-weight:800;margin:30px 0 12px;border-top:1px solid var(-
  white-space:nowrap;flex:none;transition:background-color .2s,color .2s}}
 .tools button:hover{{background:var(--signal);color:var(--on-signal)}}
 .hint{{font-size:12px;color:var(--muted-2)}}
-.list{{white-space:pre-line;max-height:210px;overflow:auto;background:var(--panel-2);
- border:1px solid var(--line-2);padding:9px 11px;font-size:13px;
+.list{{max-height:220px;overflow:auto;background:var(--panel-2);
+ border:1px solid var(--line-2);padding:6px 10px;font-size:13px;
  color:var(--list-ink);overflow-wrap:anywhere}}
+.item{{display:flex;justify-content:space-between;align-items:baseline;gap:8px;
+ padding:3px 0;border-bottom:1px dashed var(--line-2)}}
+.item:last-child{{border-bottom:0}}
+.item .aid{{font-size:11px;color:var(--muted-2);font-variant-numeric:tabular-nums;flex:none}}
+.badge-missing{{font-style:normal;font-size:10.5px;padding:1px 6px;background:var(--tag-bg);
+ color:var(--muted);flex:none}}
+.search-bar{{display:flex;align-items:center;gap:12px;margin:0 0 14px;flex-wrap:wrap}}
+.search-bar input{{flex:1;min-width:220px;max-width:440px;padding:8px 12px;font-size:13.5px;
+ background:var(--panel);color:var(--ink);border:1px solid var(--ink);outline:none}}
+.search-bar input:focus{{box-shadow:inset 3px 0 0 var(--signal)}}
+.hidden-row{{display:none!important}}
 .hidden{{position:absolute;left:-9999px;width:1px;height:1px}}
 table{{width:100%;border-collapse:collapse;background:var(--panel);font-size:13px}}
 th,td{{border:1px solid var(--line-2);padding:6px 9px;text-align:left;overflow-wrap:anywhere}}
@@ -187,13 +218,18 @@ code{{background:var(--code-bg);padding:1px 5px}}
 </div>
 {notes_html}
 <h2>按获取来源分组</h2>
+<div class="search-bar">
+  <input id="searchInput" type="search" placeholder="筛选游戏名称、appid 或包名…" oninput="filterReport(this.value)">
+  <span id="searchCount" class="hint"></span>
+</div>
 <div class="grid">{''.join(cards)}</div>
 {unmatched_lic}
 {unmatched_games_html}
 <h2>这份报告是怎么来的</h2>
 <p class="sub" style="margin:0">来源（Steam 商店 / CDK·Key / 免费领取 / 赠礼）来自你在许可页导出的一键包；
-本机 Steam 客户端的 <code>packageinfo.vdf</code> 只提供「礼包包 → 游戏 appid」的身份对照，
-由工具自动定位并只读解析，<b>不需要你去找这个文件</b>，它本身也不记录你每份许可的获取方式。</p>
+工具会自动定位并只读解析本机 Steam 客户端的 <code>appinfo.vdf</code>（补全缺失的英文与本地化游戏名）和
+<code>packageinfo.vdf</code>（提供「礼包包 → 游戏 appid」精确映射与合集整包展开），<b>不需要你去找任何文件</b>，它们也不记录获取方式。
+少数仍显示为 <code>App &lt;appid&gt;</code> 的条目在 Steam 数据库中已无记录（多为已下架、内部测试或散装 DLC），但已尽量按礼包关系归入对应分组。</p>
 <h2>想让这些分组直接出现在 Steam 库里？</h2>
 <p class="sub" style="margin:0 0 10px">默认<b>不改动 Steam 任何文件</b>。上面每组的「复制游戏名清单」可以直接在客户端建收藏集，最安全。
 若希望工具代为写入：打开图形界面（项目里的「启动 Steam 分组工具.bat」或桌面图标），点「一键写入 Steam」并勾选确认。
@@ -207,6 +243,29 @@ Steam 正在运行时，工具会让 <b>Steam 客户端自己保存并上传到�
 </footer>
 </div>
 <script>
+function filterReport(raw){{
+  var q=(raw||"").trim().toLowerCase(),hits=0;
+  document.querySelectorAll(".card").forEach(function(card){{
+    var shown=0;
+    card.querySelectorAll(".item").forEach(function(el){{
+      var ok=!q||(el.getAttribute("data-search")||"").indexOf(q)>=0;
+      el.classList.toggle("hidden-row",!ok);
+      if(ok){{shown++;hits++;}}
+    }});
+    var cnt=card.querySelector(".count");
+    if(cnt){{
+      var tot=card.getAttribute("data-total")||shown;
+      cnt.textContent=q?(shown+" / "+tot+" 款"):(tot+" 款");
+    }}
+  }});
+  document.querySelectorAll("tbody tr[data-search]").forEach(function(tr){{
+    var ok=!q||(tr.getAttribute("data-search")||"").indexOf(q)>=0;
+    tr.classList.toggle("hidden-row",!ok);
+    if(ok)hits++;
+  }});
+  var label=document.getElementById("searchCount");
+  if(label)label.textContent=q?("匹配 "+hits+" 条"):"";
+}}
 function copyBox(id,btn){{
   var t=document.getElementById(id); if(!t)return;
   var ok=function(){{
@@ -310,8 +369,9 @@ def write_outputs(plan: Plan, outdir: Path, license_source: str, owned_source: s
         "",
         "## 已知限制",
         "",
-        "- 许可页没有 appid，只有包名；工具会剥离版本／地区后缀、拆分双语包名，并用本机 Steam 缓存的中文名对齐，仍对不上的（改名、Demo、无名 DLC）不会硬猜。",
-        "- 「合集包／促销包」这类一行许可对应多个 appid 的情况，会按本机礼包缓存里的「包 → appid」精确展开，把本体和 DLC 一起归到同一来源（mapping.csv 中 match_via=bundle），不会把它们留在 ⑥。",
+        "- 许可页没有 appid，只有包名；工具会剥离版本／促销／地区后缀、拆分双语包名，并用本机 Steam `appinfo.vdf` 中的主名称与本地化译名对齐，仍对不上的（改名、Demo、无名 DLC）不会硬猜。",
+        "- 「合集包／促销包」这类一行许可对应多个 appid 的情况，会按本机 `packageinfo.vdf` 的「包 → appid」映射精确展开，把本体和 DLC 一起归到同一来源（`mapping.csv` 中 `match_via=bundle`），不会把它们留在 ⑥。",
+        "- 仍显示为 `App <appid>` 的少量条目在 Steam 数据库中已无记录（多为已下架、内部测试或散装 DLC），不影响按礼包包归组。",
         "- 「免费周末」和「限时免费永久领取」在 Steam 上都是免费类许可，无法自动区分。",
         "- ⑥ 组与上面两张「未能对齐」表是同一次配对失败的两面：前者是没被许可行认领的 appid，后者是没找到 appid 的许可行。因此 ⑥ 里既有本来就没有许可行的 F2P / Demo / 免费周末残留，也有买过但包名没对上的完整游戏。",
         "- 家庭共享需要 `--family-file` 提供清单（许可页不含别人的游戏）。",

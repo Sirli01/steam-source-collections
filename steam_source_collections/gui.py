@@ -215,6 +215,7 @@ class Handler(BaseHTTPRequestHandler):
                 infer_order=bool(body.get("infer_order", True)),
                 conflict=conflict,
                 include_cross=include_cross,
+                online_names=bool(body.get("online_names", False)),
             )
             state.analysis = analysis
             state.local = analysis.local
@@ -228,6 +229,8 @@ class Handler(BaseHTTPRequestHandler):
                     "unnamed_apps": analysis.meta["unnamed_apps"],
                     "explicit_appid_rows": analysis.meta["explicit_appid_rows"],
                     "local_cache_packages": analysis.meta["local_cache_packages"],
+                    "cache_recovered_names": analysis.meta.get("cache_recovered_names", 0),
+                    "online_recovered_names": analysis.meta.get("online_recovered_names", 0),
                     "schema": analysis.meta["schema"],
                 },
                 "groups": analysis.groups(),

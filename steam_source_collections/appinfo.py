@@ -66,22 +66,22 @@ def _header_end(data: bytes, off: int, owned: set[int]) -> tuple[int, int] | Non
     """(appid, end_offset) when off looks like a valid app record header."""
     if off < 0 or off + HEADER_SIZE > len(data):
         return None
-    appid, size, _state = struct.unpack_from("<III", data, off)
-    if appid not in owned or not (MIN_SECTION <= size <= MAX_SECTION):
+    appid, size, state = struct.unpack_from("<III", data, off)
+    if appid not in owned or state not in (1, 2) or not (MIN_SECTION <= size <= MAX_SECTION):
         return None
     end = off + HEADER_SIZE + size
     if end > len(data):
         return None
-    timestamp = struct.unpack_from("<Q", data, off + 12)[0]
+    timestamp = struct.unpack_from("<I", data, off + 12)[0]
     if not (MIN_TIMESTAMP <= timestamp <= MAX_TIMESTAMP):
         return None
     return appid, end
 
 
-def _nearest_appid(data: bytes, pos: int, owned: set[int]) -> int | None:
-    start = pos - 1
+def _nearest_appid(data: bytes, pos: int, owned: set[int], lookback: int = LOOKBACK) -> int | None:
+    start = pos - HEADER_SIZE
     # -1 (not 0) so a record header sitting at the very first byte is checked.
-    floor = max(-1, pos - LOOKBACK)
+    floor = max(-1, pos - lookback)
     for off in range(start, floor, -1):
         header = _header_end(data, off, owned)
         if header and off + HEADER_SIZE <= pos < header[1]:
@@ -92,10 +92,50 @@ def _nearest_appid(data: bytes, pos: int, owned: set[int]) -> int | None:
 def _load_bytes(path_or_data: str | Path | bytes | bytearray | memoryview) -> bytes:
     if isinstance(path_or_data, (bytes, bytearray, memoryview)):
         return bytes(path_or_data)
+    path = Path(path_or_data)
+    if path.is_dir():
+        resolved = appinfo_path(path)
+        if not resolved:
+            return b""
+        path = resolved
     try:
-        return Path(path_or_data).read_bytes()
+        return path.read_bytes()
     except OSError:
         return b""
+
+
+NAME_KEY_MARK = b"\x01" + struct.pack("<I", 4)
+
+
+def read_app_names(path_or_data: str | Path | bytes | bytearray | memoryview, wanted) -> dict[int, str]:
+    """Read primary English app names from appinfo.vdf for ``wanted`` appids only."""
+    wanted_ids = {int(value) for value in (wanted or ())}
+    if not wanted_ids:
+        return {}
+    data = _load_bytes(path_or_data)
+    if not data:
+        return {}
+    found: dict[int, str] = {}
+    pos = 0
+    while len(found) < len(wanted_ids):
+        index = data.find(NAME_KEY_MARK, pos)
+        if index < 0:
+            break
+        start = index + len(NAME_KEY_MARK)
+        pos = start
+        end = data.find(b"\x00", start)
+        if end < 0 or end - start > 250:
+            continue
+        try:
+            text = data[start:end].decode("utf-8").strip()
+        except UnicodeDecodeError:
+            continue
+        if not text or "\n" in text:
+            continue
+        appid = _nearest_appid(data, index, wanted_ids, lookback=1024)
+        if appid is not None and appid not in found:
+            found[appid] = text
+    return found
 
 
 def _scan_localized_fragment(data: bytes, fragment: str, owned_ids: set[int]) -> set[int]:

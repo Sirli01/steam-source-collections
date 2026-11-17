@@ -166,11 +166,20 @@ def scan(local: LocalSteam | None = None, bundle_path: str | Path | None = None,
 def build_notes(meta: dict) -> list[str]:
     notes: list[str] = list(meta.get("account_notes") or [])
     if meta.get("local_cache_packages"):
-        notes.append(
+        cache_note = (
             f"已只读解析本机 Steam 缓存：{meta['local_cache_packages']} 个礼包包、"
-            f"{meta['explicit_appid_rows']} 行许可精确对齐到 appid，"
-            f"并补回 {meta.get('inferred_names', 0)} 个显示名称。"
+            f"{meta['explicit_appid_rows']} 行许可精确对齐到 appid"
         )
+        if meta.get("cache_recovered_names"):
+            cache_note += f"，从 appinfo.vdf 补全 {meta['cache_recovered_names']} 个游戏名称"
+        if meta.get("inferred_names"):
+            cache_note += f"，由单应用礼包兜底 {meta['inferred_names']} 个显示名"
+        cache_note += "。"
+        notes.append(cache_note)
+    elif meta.get("cache_recovered_names"):
+        notes.append(f"已从本机 appinfo.vdf 补全 {meta['cache_recovered_names']} 个游戏名称。")
+    if meta.get("online_recovered_names"):
+        notes.append(f"已通过 Steam 接口联网补全 {meta['online_recovered_names']} 个游戏名称。")
     if meta.get("order_aligned_rows"):
         notes.append(
             f"其中 {meta['order_aligned_rows']} 行的礼包包由顺序对齐推定（间接证据），"
@@ -188,8 +197,8 @@ def build_notes(meta: dict) -> list[str]:
         )
     if meta.get("unnamed_apps"):
         notes.append(
-            f"{meta['unnamed_apps']} 款游戏没有名称，多为 DLC / 已下架 / 试玩项目，"
-            "商店接口本来就不返回；重新导出也补不回来，已尽量按礼包包归组。"
+            f"{meta['unnamed_apps']} 款游戏没有名称（显示为 App <appid>），"
+            "在 Steam 数据库中已无记录（多为已下架 / 内部测试 / 散装 DLC），已尽量按礼包包归组。"
         )
     if meta.get("family_apps"):
         group = meta.get("family_groupid")
@@ -209,7 +218,7 @@ def build_notes(meta: dict) -> list[str]:
 def analyse(bundle_path: str | Path | None = None, outdir: str | Path = "out",
             infer_order: bool = True, threshold: float = 0.86,
             conflict: str = "priority", extra_groups: bool = True,
-            include_cross: bool = False) -> Analysis:
+            include_cross: bool = False, online_names: bool = False) -> Analysis:
     """One-click statistics: locate everything, build the plan, write reports."""
     local = discover()
     path = locate_bundle(outdir, bundle_path)
@@ -219,7 +228,9 @@ def analyse(bundle_path: str | Path | None = None, outdir: str | Path = "out",
             "打开 Steam 许可页并在那个页面上点一下书签 → 浏览器自动下载后回来点「一键统计」。"
             "也可以把下载好的 steam-licenses-*.json 直接拖进窗口。"
         )
-    bundle = load_bundle(path, local, threshold, infer_order=infer_order)
+    bundle = load_bundle(
+        path, local, threshold, infer_order=infer_order, online_names=online_names,
+    )
     plan = build_plan(
         bundle.records, bundle.games, bundle.matches, set(), set(),
         conflict=conflict, extra_groups=extra_groups,

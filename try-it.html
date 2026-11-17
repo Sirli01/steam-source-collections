@@ -140,6 +140,8 @@
   .result-banner{display:none;background:var(--accent-soft);border:1px solid color-mix(in srgb,var(--accent) 30%,transparent);
     border-radius:9px;padding:10px 12px;font-size:12.5px;line-height:1.7;margin-bottom:14px}
   .result-banner.show{display:block}
+  .result-banner ul{margin:6px 0 0;padding-left:18px}
+  .result-banner li{margin:2px 0}
   #dropOverlay{position:fixed;inset:0;z-index:99;display:none;align-items:center;justify-content:center;
     background:color-mix(in srgb,var(--accent) 12%,rgba(0,0,0,.45));backdrop-filter:blur(2px);
     color:#fff;font-size:22px;font-weight:700;text-align:center;pointer-events:none}
@@ -300,7 +302,7 @@
         <div class="cross" id="cross"></div>
         <div class="section-title">需要人工复核</div>
         <div class="tbl-wrap"><table id="issues"></table></div>
-        <p class="hint" style="margin-top:14px">当前网页仅在本地生成分组预览与报告；如需一键写回 Steam 客户端，请在本地图形界面（<code>python -m steam_source_collections gui</code>）中执行，支持客户端实时写入与只增补的键值文件写回，写前均会自动备份并支持一键撤销。</p>
+        <p class="hint" style="margin-top:14px">当前网页仅在本地生成分组预览与报告；如需一键写回 Steam 客户端或用本机 <code>appinfo.vdf</code> 自动补全缺名游戏，请在本地图形界面（<code>python -m steam_source_collections.gui</code>）中执行，支持客户端实时写入与只增补的键值文件写回，写前均会自动备份并支持一键撤销。</p>
       </div>
     </div>
   </div>
@@ -944,9 +946,17 @@ function classify(method){
   return "unknown";
 }
 const VERSION_WORDS=/\b(standard|deluxe|ultimate|collector'?s|complete|digital|retail|premium|starter|game of the year|goty|edition|pre-?purchase|launch|limited free promotional)\b/gi;
-const EDITION_PART_RE=/^[\s\[\]()（）]*(?:(?:standard|deluxe|ultimate|collector'?s|complete|digital|retail|premium|starter|game of the year|goty|edition|pre-?purchase|launch|limited free promotional|cn|china|cthm|row|ww|asia|prc|global|japan|jp|us|uk|pack|bundle|demo|playtest|free weekend|soundtrack|ost|dlc|base game)\b[\s\-–—:：()\[\]（）]*)+$/i;
+const MONTH_YEAR_SRC="(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\\s+\\d{4}";
+const PROMO_SUFFIX_RE=new RegExp("\\b(?:limited\\s+free\\s+promotional(?:\\s+package)?|free\\s+weekend)(?:[\\s\\-–—:：()\\[\\]（）]*"+MONTH_YEAR_SRC+"[\\s()\\[\\]（）]*)?","i");
+const DATE_FRAGMENT_RE=/^(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*)?\d{2,4}$/i;
+const EDITION_PART_RE=new RegExp("^[\\s\\[\\]()（）]*(?:(?:standard|deluxe|ultimate|collector'?s|complete|digital|retail|premium|starter|game of the year|goty|edition|pre-?purchase|launch|limited free promotional|cn|china|cthm|row|ww|asia|prc|global|japan|jp|us|uk|pack|bundle|demo|playtest|free weekend|soundtrack|ost|dlc|base game|promotional|package|"+MONTH_YEAR_SRC+")\\b[\\s\\-–—:：()\\[\\]（）]*)+$","i");
 const ALIAS_SPLIT_RE=/\s*(?:[-–—:：/|])\s*/;
 const CJK_RE=/[\u3400-\u4dbf\u4e00-\u9fff]/;
+function stripPromoSuffix(packageName){
+  const text=String(packageName||"").normalize("NFKC");
+  const cleaned=text.replace(PROMO_SUFFIX_RE," ").replace(/\s+/g," ").replace(/^[\s\-–—:：/|]+|[\s\-–—:：/|]+$/g,"");
+  return cleaned||text.trim();
+}
 const MONTHS={jan:1,january:1,feb:2,february:2,mar:3,march:3,apr:4,april:4,may:5,jun:6,june:6,
   jul:7,july:7,aug:8,august:8,sep:9,sept:9,september:9,oct:10,october:10,nov:11,november:11,dec:12,december:12};
 function normalizeDate(raw){
@@ -977,14 +987,12 @@ function normalize(v){
   s=s.trim().replace(/^the\s+/,"");
   return s.replace(/\s+/g,"");
 }
-function aliasCandidates(packageName){
-  const text=String(packageName||"").normalize("NFKC");
+function collectAliasVariants(text,out){
   const parts=text.split(ALIAS_SPLIT_RE).map(p=>p.trim()).filter(Boolean);
-  const out=[];
   if(parts.length>=2){
     if(parts.slice(1).every(p=>EDITION_PART_RE.test(p))&&normalize(parts[0]).length>=3)
       out.push([parts[0],"normalized"]);
-    if(String(packageName||"").includes("/")){
+    if(text.includes("/")){
       for(const part of parts){
         if(CJK_RE.test(part))continue;
         if(normalize(part).length>=4)out.push([part,"alias"]);
@@ -995,6 +1003,15 @@ function aliasCandidates(packageName){
   stripped=stripped.replace(/\s+/g," ").replace(/^[\s\-–—:：/|]+|[\s\-–—:：/|]+$/g,"");
   if(stripped&&normalize(stripped)!==normalize(text)&&normalize(stripped).length>=3)
     out.push([stripped,"normalized"]);
+}
+function aliasCandidates(packageName){
+  const text=String(packageName||"").normalize("NFKC");
+  const cleaned=stripPromoSuffix(text);
+  const out=[];
+  if(cleaned&&normalize(cleaned)!==normalize(text)&&normalize(cleaned).length>=3)
+    out.push([cleaned,"normalized"]);
+  collectAliasVariants(cleaned,out);
+  if(cleaned!==text)collectAliasVariants(text,out);
   const seen=new Set(),res=[];
   for(const [label,via] of out){
     const k=normalize(label);
@@ -1155,7 +1172,12 @@ function usefulPackages(raw,ownedSet){
   }
   return out;
 }
-function guessPid(name,nameToPid){
+function exactKey(name){return String(name||"").trim().toLowerCase().replace(/\s+/g," ");}
+function guessPid(name,nameToPid,exactToPid){
+  if(exactToPid){
+    const ek=exactKey(name);
+    if(ek&&exactToPid.has(ek))return exactToPid.get(ek);
+  }
   const key=normalize(name);if(!key)return null;
   if(nameToPid.has(key))return nameToPid.get(key);
   if(key.length<8)return null;
@@ -1215,7 +1237,7 @@ function parseBundlePackageApps(raw){
   return{pkgMap,extraNames};
 }
 function packageTitleScore(packageName,appName){
-  const pKey=normalize(packageName),aKey=normalize(appName);
+  const pKey=normalize(stripPromoSuffix(packageName)),aKey=normalize(appName);
   if(!pKey||!aKey)return 0;
   if(pKey===aKey)return 1;
   const [short,long]=pKey.length<=aKey.length?[pKey,aKey]:[aKey,pKey];
@@ -1265,6 +1287,36 @@ function expandPackageMatches(records,matches,claimedPids,pkgMap,names,byId,thre
     games.forEach(g=>assigned.add(g.appid));
     expanded_rows++;expanded_apps+=games.length;
   }
+  records.forEach((rec,rowIndex)=>{
+    const m=matches[rowIndex];
+    if(!m.games.length||m.via==="package"||m.via==="order"||m.via==="bundle")return;
+    const curIds=new Set(m.games.map(g=>g.appid));
+    const scored=[];
+    [...pkgMap.entries()].sort((a,b)=>a[0]-b[0]).forEach(([pid,apps])=>{
+      if(claimedPids.has(pid)||usedPids.has(pid))return;
+      for(const id of curIds)if(!apps.includes(id))return;
+      const extra=apps.filter(id=>!assigned.has(id)&&byId.has(id));
+      if(!extra.length)return;
+      const labels=apps.map(id=>String(names[String(id)]||"")).filter(l=>l&&!l.startsWith("App "));
+      if(!labels.length)return;
+      let best=0;
+      for(const label of labels){const sc=packageTitleScore(rec.package_name,label);if(sc>best)best=sc;}
+      if(best>=threshold)scored.push([best,pid,apps,extra]);
+    });
+    if(!scored.length)return;
+    scored.sort((a,b)=>b[0]-a[0]||a[1]-b[1]);
+    const [topScore,topPid,topApps,topExtra]=scored[0];
+    if(scored.length>1&&scored[1][0]>=topScore-0.03){
+      const s0=new Set(topApps),s1=new Set(scored[1][2]);
+      if(s0.size!==s1.size||[...s0].some(x=>!s1.has(x)))return;
+    }
+    matches[rowIndex]={
+      games:[...m.games,...topExtra.map(id=>byId.get(id))],
+      via:"bundle",score:+topScore.toFixed(3),note:"由礼包缓存按包内游戏名展开（整包同源）"
+    };
+    usedPids.add(topPid);topExtra.forEach(id=>assigned.add(id));
+    expanded_rows++;expanded_apps+=topExtra.length;
+  });
   return{expanded_rows,expanded_apps};
 }
 function parseBundle(text,filename,cache){
@@ -1293,32 +1345,40 @@ function parseBundle(text,filename,cache){
   const mergedRaw=new Map(bundlePkgRaw);
   if(cache instanceof Map)for(const [pid,apps] of cache)mergedRaw.set(pid,apps);
   const pkg=mergedRaw.size?usefulPackages(mergedRaw,ownedSet):new Map();
-  const nameToPid=new Map();
+  const nameToPid=new Map(),exactToPid=new Map();
   if(pkg.size){
+    const normApp=new Map(),ambigNorm=new Set(),exApp=new Map(),ambigEx=new Set();
     [...pkg].sort((a,b)=>a[0]-b[0]).forEach(([pid,apps])=>{
       if(apps.length!==1)return;
-      const label=names[String(apps[0])];
-      if(label){const k=normalize(String(label));if(k&&!nameToPid.has(k))nameToPid.set(k,pid);}
+      const aid=apps[0],label=names[String(aid)];
+      if(!label||String(label).startsWith("App "))return;
+      const ek=exactKey(label);
+      if(ek){if(exApp.has(ek)&&exApp.get(ek)!==aid)ambigEx.add(ek);else{exApp.set(ek,aid);if(!exactToPid.has(ek))exactToPid.set(ek,pid);}}
+      const nk=normalize(String(label));
+      if(nk){if(normApp.has(nk)&&normApp.get(nk)!==aid)ambigNorm.add(nk);else{normApp.set(nk,aid);if(!nameToPid.has(nk))nameToPid.set(nk,pid);}}
     });
+    ambigEx.forEach(k=>exactToPid.delete(k));
+    ambigNorm.forEach(k=>nameToPid.delete(k));
   }
   const order=alignOrder(records,explicitPids,d.owned_packages||[],pkg);
   const eff=records.map((rec,i)=>{
     let p=explicitPids[i];
-    if(p==null||!pkg.has(p))p=order.get(i)||guessPid(rec.package_name,nameToPid)||null;
+    if(p==null||!pkg.has(p))p=order.get(i)||guessPid(rec.package_name,nameToPid,exactToPid)||null;
     return p;
   });
   const labelByPid=new Map();
   records.forEach((rec,i)=>{const p=eff[i];if(p!=null&&!labelByPid.has(p))labelByPid.set(p,rec.package_name);});
   let inferredNames=0;
+  const displayNames=Object.assign({},names);
   if(pkg.size){
     const single=new Map();
     [...pkg].sort((a,b)=>a[0]-b[0]).forEach(([pid,apps])=>{
       if(apps.length===1&&!single.has(apps[0]))single.set(apps[0],pid);
     });
     for(const [appid,pid] of single){
-      if(!names[String(appid)]&&labelByPid.has(pid)){
-        const label=String(labelByPid.get(pid)).trim().slice(0,120);
-        if(label){names[String(appid)]=label;inferredNames++;}
+      if((!displayNames[String(appid)]||String(displayNames[String(appid)]).startsWith("App "))&&labelByPid.has(pid)){
+        const label=stripPromoSuffix(labelByPid.get(pid)).slice(0,120);
+        if(label){displayNames[String(appid)]=label;inferredNames++;}
       }
     }
   }
@@ -1328,25 +1388,27 @@ function parseBundle(text,filename,cache){
   Object.keys(famNames).forEach(id=>{
     const label=String(famNames[id]||"").trim();
     if(label&&!names[String(id)])names[String(id)]=label;
+    if(label&&!displayNames[String(id)])displayNames[String(id)]=label;
   });
   const famIds=[...new Set((Array.isArray(d.family_shared_appids)?d.family_shared_appids:[])
     .map(Number).filter(n=>Number.isFinite(n)&&n>0&&!ownedSet.has(n)))];
   const games=ownedIds.map(id=>({
-    appid:id,name:String(names[String(id)]||("App "+id)),
+    appid:id,name:String(displayNames[String(id)]||("App "+id)),
     playtime_minutes:Number(times[String(id)]||0)||0,family_shared:false
   })).concat(famIds.map(id=>({
-    appid:id,name:String(names[String(id)]||("App "+id)),
+    appid:id,name:String(displayNames[String(id)]||("App "+id)),
     playtime_minutes:Number(times[String(id)]||0)||0,family_shared:true
   })));
   if(!games.length)throw new Error("导出包里没有游戏 appid 列表，请回到许可页重新点一次书签。");
-  const byId=new Map(games.map(g=>[g.appid,g])),idx=buildIndex(games.slice(0,ownedIds.length));
+  const byId=new Map(games.map(g=>[g.appid,g]));
+  const idx=buildIndex(games.slice(0,ownedIds.length).filter(g=>names[String(g.appid)]&&!String(names[String(g.appid)]).startsWith("App ")));
   const matches=records.map((rec,i)=>{
     const ids=[...(explicitIds[i]||[])],p=eff[i];
     if(p!=null&&pkg.has(p))ids.push(...pkg.get(p));
     const resolved=[...new Set(ids)].map(id=>byId.get(id)).filter(Boolean);
     if(resolved.length){
       const fromOrder=order.has(i)&&explicitPids[i]==null;
-      return {games:resolved,via:fromOrder?"order":"package",score:fromOrder?0.9:1,
+      return {games:resolved,via:fromOrder?"order":"package",score:fromOrder?0.65:1,
         note:fromOrder?"由本机缓存顺序对齐推定，建议抽查"
                      :"由礼包包 → appid 精确对应"+(localPkg.size?"（本机 Steam 缓存）":"")};
     }
@@ -1408,10 +1470,13 @@ function matchPackage(pkg,idx,threshold=0.86){
   let best=null,bestScore=0;
   for(const cand of idx.keys()){const r=ratio(key,cand);if(r>bestScore){bestScore=r;best=cand;}}
   if(best&&bestScore>=threshold)return{games:[...idx.get(best)],via:"fuzzy",score:+bestScore.toFixed(3),note:""};
-  if(/bundle|捆绑|合集|package|pack|礼包|包/i.test(pkg)){
+  const bundleText=stripPromoSuffix(pkg);
+  if(/bundle|捆绑|合集|package|pack|礼包|包/i.test(bundleText)){
     const hits=new Map();
-    pkg.split(/[+&,/·:：\-]/).filter(p=>p.trim().length>=4).forEach(part=>{
-      const fk=normalize(part);if(!fk)return;
+    bundleText.split(/[+&,/·:：\-]/).map(p=>p.trim()).filter(p=>p.length>=4).forEach(part=>{
+      if(EDITION_PART_RE.test(part))return;
+      const fk=normalize(part);
+      if(!fk||/^\d+$/.test(fk)||DATE_FRAGMENT_RE.test(fk))return;
       for(const[cand,gs]of idx)
         if(fk.length>=5&&(fk===cand||(cand.length>=8&&cand.includes(fk))))gs.forEach(g=>hits.set(g.appid,g));
     });
@@ -1486,7 +1551,11 @@ function hero(msg,ok){
 }
 function setBanner(label,info){
   const el=$("resultBanner");
-  el.innerHTML=`<b>${esc(label)}</b><br>${esc(info)}`;
+  if(Array.isArray(info)){
+    el.innerHTML=`<b>${esc(label)}</b><ul>${info.filter(Boolean).map(item=>`<li>${esc(item)}</li>`).join("")}</ul>`;
+  }else{
+    el.innerHTML=`<b>${esc(label)}</b><br>${esc(info)}`;
+  }
   el.classList.add("show");
 }
 function render(plan,label){
@@ -1532,23 +1601,23 @@ function runBundle(text,filename){
       `请删掉旧书签、重新拖第 1 步的蓝色按钮，再到许可页点一次；下面的结果只能当部分参考。`);
     hero(`⚠️ ${filename} 只抓到第一页，请更新书签后重导`,false);
   }else{
-    let info=`共 ${m.owned_apps} 款游戏、${m.license_rows} 行许可${pages}，已按 ①～⑥ 分好。`;
+    const bullets=[`共 ${m.owned_apps} 款游戏、${m.license_rows} 行许可${pages}，已按 ①～⑥ 分好。`];
     if(m.local_cache_packages)
-      info+=` 已用本机 Steam 缓存精确对齐 ${m.explicit_rows} 行许可（其中 ${m.order_aligned_rows} 行由顺序推定），并补回 ${m.inferred_names} 个名称。`;
+      bullets.push(`已用本机 Steam 缓存精确对齐 ${m.explicit_rows} 行许可（其中 ${m.order_aligned_rows} 行由顺序推定），并补回 ${m.inferred_names} 个名称。`);
     else if(m.bundle_cache_packages)
-      info+=` 已用导出包内置礼包映射精确对齐 ${m.explicit_rows} 行许可，并补回 ${m.inferred_names} 个名称。`;
+      bullets.push(`已用导出包内置礼包映射精确对齐 ${m.explicit_rows} 行许可，并补回 ${m.inferred_names} 个名称。`);
     if(m.expanded_rows)
-      info+=` 整包展开补充 ${m.expanded_rows} 行合集许可（覆盖 ${m.expanded_apps} 款游戏）。`;
+      bullets.push(`整包展开补充 ${m.expanded_rows} 行合集许可（覆盖 ${m.expanded_apps} 款游戏）。`);
     if(m.unnamed_apps)
-      info+=` 另有 ${m.unnamed_apps} 款没拿到名称，多为 DLC / 已下架 / 试玩项目，商店接口本来就不返回名称，重导也补不回来。`+
-        ((m.local_cache_packages||m.bundle_cache_packages)?` 它们已尽量用礼包包映射归组。`:` 想把它们也对齐，启动图形界面点「🔍 一键统计」即可，它会自己找到本机 Steam 缓存，不用重新导出、也不用找文件。`);
-    if(unknown)info+=` 当前 ⑥ 组 ${unknown} 款，可在下方「需要人工复核」逐条核对。`;
-    info+=m.family_apps
-      ? ` ⑤ 家庭共享读到 ${m.family_apps} 款家人借给你的游戏，已自动归组（它们不在你的许可页里，属正常情况）。`
-      : ` ⑤ 家庭共享这份包里没有借来的游戏清单。删掉旧书签、重新拖上面的按钮并在许可页点一次，即可自动填好 ⑤ 组。`;
-    info+=m.has_playtimes?` 含 ${m.playtime_count} 条游玩时长，交叉分组可用。`:
-      ` 本次不含游玩时长，未生成「吃灰区 / 真的玩过」等交叉组，以免给出错数字；启动图形界面可补本机时长。`;
-    setBanner("✅ 已完成："+filename,info);
+      bullets.push(`仍有 ${m.unnamed_apps} 款没拿到名称，多为 DLC / 已下架 / 试玩项目，商店接口本来就不返回；`+
+        ((m.local_cache_packages||m.bundle_cache_packages)?`已尽量用礼包包映射归组。`:`启动图形界面点「一键统计」会自动读取本机 appinfo.vdf 与 packageinfo.vdf 补齐名称并归组。`));
+    if(unknown)bullets.push(`当前 ⑥ 组 ${unknown} 款，可在下方「需要人工复核」逐条核对。`);
+    bullets.push(m.family_apps
+      ? `⑤ 家庭共享读到 ${m.family_apps} 款家人借给你的游戏，已自动归组（它们不在你的许可页里，属正常情况）。`
+      : `⑤ 家庭共享：这份包里没有借来的游戏清单；重新拖上面的按钮并在许可页点一次即可自动填好 ⑤ 组。`);
+    bullets.push(m.has_playtimes?`含 ${m.playtime_count} 条游玩时长，交叉分组可用。`:
+      `本次不含游玩时长，未生成「吃灰区 / 真的玩过」等交叉组，以免给出错数字；启动图形界面可补本机时长。`);
+    setBanner("✅ 已完成："+filename,bullets);
     hero(`✅ 已读取 ${filename}，结果已生成（右侧）`,true);
   }
   $("err").style.display="none";

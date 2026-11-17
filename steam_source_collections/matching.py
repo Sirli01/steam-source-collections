@@ -33,12 +33,23 @@ VERSION_WORDS = (
     r"game of the year|goty|edition|pre-?purchase|launch|limited free promotional"
 )
 REGION_WORDS = r"cn|china|cthm|row|ww|asia|prc|global|japan|jp|us|uk"
+MONTH_YEAR_RE = r"(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\s+\d{4}"
+PROMO_SUFFIX_RE = re.compile(
+    r"\b(?:limited\s+free\s+promotional(?:\s+package)?|free\s+weekend)"
+    r"(?:[\s\-–—:：()\[\]（）]*" + MONTH_YEAR_RE + r"[\s()\[\]（）]*)?",
+    re.I,
+)
+DATE_FRAGMENT_RE = re.compile(
+    r"^(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*)?\d{2,4}$",
+    re.I,
+)
 # Region words are ONLY allowed when judging a trailing segment. Removing them
 # from an arbitrary title would turn "Global Offensive" into a different game.
 EDITION_WORD_RE = re.compile(r"\b(?:" + VERSION_WORDS + r")\b", re.I)
 EDITION_PART_RE = re.compile(
     r"^[\s\[\]()（）]*(?:(?:" + VERSION_WORDS + r"|" + REGION_WORDS + r"|"
-    r"pack|bundle|demo|playtest|free weekend|soundtrack|ost|dlc|base game)"
+    r"pack|bundle|demo|playtest|free weekend|soundtrack|ost|dlc|base game|"
+    r"promotional|package|" + MONTH_YEAR_RE + r")"
     r"\b[\s\-–—:：()\[\]（）]*)+$",
     re.I,
 )
@@ -46,21 +57,20 @@ ALIAS_SPLIT_RE = re.compile(r"\s*(?:[-–—:：/|])\s*")
 CJK_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff]")
 
 
-def alias_candidates(package_name: str) -> list[tuple[str, str]]:
-    """Conservative rewrites of a license package name into a game name.
-
-    Only two shapes are produced: removing a pure edition/region tail, and
-    taking the non-Chinese half of a bilingual name. Everything else keeps
-    going through the original substring/fuzzy rules instead of being guessed.
-    """
+def strip_promo_suffix(package_name: str) -> str:
+    """Strip Steam's dated promotional / free-weekend tail from a package name."""
     text = unicodedata.normalize("NFKC", package_name or "")
+    cleaned = re.sub(r"\s+", " ", PROMO_SUFFIX_RE.sub(" ", text)).strip(" -–—:：/|")
+    return cleaned or text.strip()
+
+
+def _collect_alias_variants(text: str, out: list[tuple[str, str]]) -> None:
     parts = [p.strip() for p in ALIAS_SPLIT_RE.split(text) if p.strip()]
-    out: list[tuple[str, str]] = []
     if len(parts) >= 2:
         if all(EDITION_PART_RE.match(p) for p in parts[1:]):
             if len(normalize(parts[0])) >= 3:
                 out.append((parts[0], "normalized"))
-        if "/" in package_name:
+        if "/" in text:
             for part in parts:
                 if CJK_RE.search(part):
                     continue
@@ -70,6 +80,23 @@ def alias_candidates(package_name: str) -> list[tuple[str, str]]:
     stripped = re.sub(r"\s+", " ", stripped).strip(" -–—:：/|")
     if stripped and normalize(stripped) != normalize(text) and len(normalize(stripped)) >= 3:
         out.append((stripped, "normalized"))
+
+
+def alias_candidates(package_name: str) -> list[tuple[str, str]]:
+    """Conservative rewrites of a license package name into a game name.
+
+    Only two shapes are produced: removing a pure edition/region/promotional tail,
+    and taking the non-Chinese half of a bilingual name. Everything else keeps
+    going through the original substring/fuzzy rules instead of being guessed.
+    """
+    text = unicodedata.normalize("NFKC", package_name or "")
+    cleaned = strip_promo_suffix(text)
+    out: list[tuple[str, str]] = []
+    if cleaned and normalize(cleaned) != normalize(text) and len(normalize(cleaned)) >= 3:
+        out.append((cleaned, "normalized"))
+    _collect_alias_variants(cleaned, out)
+    if cleaned != text:
+        _collect_alias_variants(text, out)
     seen: set[str] = set()
     result: list[tuple[str, str]] = []
     for label, via in out:
@@ -153,12 +180,15 @@ def match_package(package_name: str, index: dict[str, list[Game]], threshold: fl
 
     # Bundles often contain several separately-owned games. Only accept
     # unambiguous fragment matches and flag the row for review.
-    if BUNDLE_RE.search(package_name):
-        fragments = [part for part in re.split(r"[+&,/·:：\-]", package_name) if len(part.strip()) >= 4]
+    bundle_text = strip_promo_suffix(package_name)
+    if BUNDLE_RE.search(bundle_text):
+        fragments = [part.strip() for part in re.split(r"[+&,/·:：\-]", bundle_text) if len(part.strip()) >= 4]
         hits: list[Game] = []
         for fragment in fragments:
+            if EDITION_PART_RE.match(fragment):
+                continue
             fkey = normalize(fragment)
-            if not fkey:
+            if not fkey or fkey.isdigit() or DATE_FRAGMENT_RE.match(fkey):
                 continue
             for candidate, games in index.items():
                 if len(fkey) >= 5 and (fkey == candidate or (len(candidate) >= 8 and fkey in candidate)):

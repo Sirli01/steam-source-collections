@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import os
 
-from .matching import MatchResult, normalize
+from .matching import MatchResult, normalize, strip_promo_suffix
 
 # Calibrated on a 913-row / 1218-app real library: every correct hit scored
 # >= 0.78, while unrelated package titles score 0.0. Keeping the bar high is
@@ -30,7 +30,7 @@ AMBIGUITY_GAP = 0.03
 
 def package_title_score(package_name: str, app_name: str) -> float:
     """Similarity between a license package name and one app inside it."""
-    package_key = normalize(package_name)
+    package_key = normalize(strip_promo_suffix(package_name))
     app_key = normalize(app_name)
     if not package_key or not app_key:
         return 0.0
@@ -135,4 +135,42 @@ def expand_package_matches(
         assigned.update(game.appid for game in games)  # type: ignore[attr-defined]
         expanded_rows += 1
         expanded_apps += len(games)
+
+    # A row whose name matched one app inside a multi-app package (for example
+    # "Middle-earth: Shadow of War Definitive Edition" matching the content app)
+    # should still claim the rest of its unclaimed package siblings.
+    for row_index, (record, match) in enumerate(zip(records, matches)):
+        if not match.games or match.via in ("package", "order", "bundle"):
+            continue
+        cur_ids = {game.appid for game in match.games}  # type: ignore[attr-defined]
+        scored_rows: list[tuple[float, int, list[int], list[int]]] = []
+        for pid, apps in sorted(package_apps.items()):
+            if pid in claimed_pids or pid in used_pids or not cur_ids.issubset(set(apps)):
+                continue
+            extra = [appid for appid in apps if appid not in assigned and appid in by_id]
+            if not extra:
+                continue
+            labels = [names.get(str(appid), "") for appid in apps]
+            labels = [label for label in labels if label and not label.startswith("App ")]
+            if not labels:
+                continue
+            row_score = max(package_title_score(record.package_name, label) for label in labels)
+            if row_score >= threshold:
+                scored_rows.append((row_score, pid, apps, extra))
+        if not scored_rows:
+            continue
+        scored_rows.sort(key=lambda item: (-item[0], item[1]))
+        top_score, top_pid, top_apps, top_extra = scored_rows[0]
+        if len(scored_rows) > 1 and scored_rows[1][0] >= top_score - AMBIGUITY_GAP:
+            if set(scored_rows[1][2]) != set(top_apps):
+                continue
+        new_games = list(match.games) + [by_id[appid] for appid in top_extra]  # type: ignore[index]
+        matches[row_index] = MatchResult(
+            games=new_games, via="bundle", score=round(top_score, 3),
+            note="由本机礼包缓存按包内游戏名展开（整包同源）",
+        )
+        used_pids.add(top_pid)
+        assigned.update(top_extra)
+        expanded_rows += 1
+        expanded_apps += len(top_extra)
     return {"expanded_rows": expanded_rows, "expanded_apps": expanded_apps}

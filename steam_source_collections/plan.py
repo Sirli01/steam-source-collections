@@ -85,7 +85,11 @@ def build_plan(
             "date": "",
             "match_via": "none",
             "match_score": 0.0,
-            "note": "没有许可行认领这个 appid（礼包名与游戏名不同，或免费 / Demo 项目）",
+            "note": (
+                "没有许可行认领这个 appid（该 appid 在 Steam 数据库中已无记录或未缓存名称）"
+                if game.name.startswith("App ")
+                else "没有许可行认领这个 appid（礼包名与游戏名不同，或免费 / Demo 项目）"
+            ),
         }
         for game in games
     }
@@ -111,6 +115,10 @@ def build_plan(
             current = assignments[game.appid]
             if current["group"] == "family":
                 continue
+            note = result.note
+            if game.name.startswith("App "):
+                suffix = "该 appid 在 Steam 数据库中已无记录或未缓存名称"
+                note = f"{note}；{suffix}" if note else suffix
             candidate = {
                 **current,
                 "group": record.category,
@@ -119,7 +127,7 @@ def build_plan(
                 "date": record.date,
                 "match_via": result.via,
                 "match_score": result.score,
-                "note": result.note,
+                "note": note,
             }
             if _should_replace(current, candidate, conflict):
                 assignments[game.appid] = candidate

@@ -17,16 +17,20 @@ the module still works exactly as before.
 from __future__ import annotations
 
 import json
+import re
+import urllib.error
+import urllib.parse
+import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
 from .appinfo import (
-    appinfo_path, first_cjk_fragment,
+    appinfo_path, first_cjk_fragment, read_app_names,
     resolve_localized_fragments, resolve_localized_names,
 )
 from .licenses import LicenseRecord, classify
 from .local import LocalSteam, discover
-from .matching import CJK_RE, MatchResult, build_index, match_package, normalize
+from .matching import CJK_RE, MatchResult, build_index, match_package, normalize, strip_promo_suffix
 from .owned import Game
 from .pkgexpand import expand_package_matches
 from .vdfcache import single_app_packages, useful_packages
@@ -88,8 +92,20 @@ def _parse_bundle_package_apps(raw_pkg_apps) -> tuple[dict[int, list[int]], dict
     return pkg_map, extra_names
 
 
-def _guess_pid(name: str, name_to_pid: dict[str, int]) -> int | None:
+def _exact_key(name: str) -> str:
+    return re.sub(r"\s+", " ", (name or "").casefold().strip())
+
+
+def _guess_pid(
+    name: str,
+    name_to_pid: dict[str, int],
+    exact_to_pid: dict[str, int] | None = None,
+) -> int | None:
     """Resolve a license row's package id from its name, conservatively."""
+    if exact_to_pid:
+        exact = _exact_key(name)
+        if exact and exact in exact_to_pid:
+            return exact_to_pid[exact]
     key = normalize(name)
     if not key:
         return None
@@ -105,6 +121,58 @@ def _guess_pid(name: str, name_to_pid: dict[str, int]) -> int | None:
             if overlap >= 0.85:
                 return pid
     return None
+
+
+STORE_ITEMS_URL = "https://api.steampowered.com/IStoreBrowseService/GetItems/v1/"
+
+
+def fetch_online_app_names(
+    appids,
+    timeout: float = 8.0,
+    retries: int = 2,
+    batch_size: int = 100,
+) -> dict[int, str]:
+    """Optional batch name lookup via Steam's IStoreBrowseService/GetItems.
+
+    Silently degrades on network timeouts or errors and returns whatever names
+    were fetched successfully.
+    """
+    ids = [int(a) for a in dict.fromkeys(appids) if _as_int(a)]
+    if not ids:
+        return {}
+    found: dict[int, str] = {}
+    for start in range(0, len(ids), batch_size):
+        chunk = ids[start: start + batch_size]
+        body = {
+            "ids": [{"appid": a} for a in chunk],
+            "context": {"language": "english", "country_code": "US", "steam_realm": 1},
+            "data_request": {"include_basic_info": True},
+        }
+        url = STORE_ITEMS_URL + "?input_json=" + urllib.parse.quote(
+            json.dumps(body, separators=(",", ":"))
+        )
+        req = urllib.request.Request(url, headers={"User-Agent": "steam-source-collections/1.0"})
+        payload = None
+        for _attempt in range(max(1, retries + 1)):
+            try:
+                with urllib.request.urlopen(req, timeout=timeout) as resp:
+                    payload = json.loads(resp.read().decode("utf-8"))
+                break
+            except (OSError, urllib.error.URLError, TimeoutError, ValueError):
+                continue
+        if not isinstance(payload, dict):
+            continue
+        items = (payload.get("response") or {}).get("store_items") or []
+        if not isinstance(items, list):
+            continue
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            aid = _as_int(item.get("appid") or item.get("id"))
+            label = str(item.get("name") or "").strip()
+            if aid and label:
+                found[aid] = label
+    return found
 
 
 def align_license_packages(records: list[LicenseRecord], explicit_pids: list[int | None],
@@ -156,7 +224,8 @@ def align_license_packages(records: list[LicenseRecord], explicit_pids: list[int
 
 
 def load_bundle(path: str | Path, local: LocalSteam | None = None,
-                threshold: float = 0.86, infer_order: bool = True) -> Bundle:
+                threshold: float = 0.86, infer_order: bool = True,
+                online_names: bool = False) -> Bundle:
     p = Path(path)
     if not p.is_file():
         raise FileNotFoundError(f"导出包不存在: {p}")
@@ -254,70 +323,7 @@ def load_bundle(path: str | Path, local: LocalSteam | None = None,
     bundle_pkg_raw, bundle_pkg_names = _parse_bundle_package_apps(data.get("package_apps"))
     for key, label in bundle_pkg_names.items():
         names.setdefault(key, label)
-    local_pkgmap = useful_packages(local.package_apps, owned_set) if local else {}
-    merged_raw = {**bundle_pkg_raw, **(local.package_apps if local else {})}
-    pkgmap = useful_packages(merged_raw, owned_set) if merged_raw else {}
-    name_to_pid: dict[str, int] = {}
-    if pkgmap:
-        # A package that grants exactly one owned app can be identified by
-        # that app's name. This lets license rows without a packageid still
-        # use the exact package -> appid mapping.
-        for pid, apps in sorted(pkgmap.items()):
-            if len(apps) != 1:
-                continue
-            label = names.get(str(apps[0]), "")
-            if label:
-                name_to_pid.setdefault(normalize(label), pid)
 
-    order_pids = align_license_packages(
-        records, explicit_pids, data.get("owned_packages") or [], pkgmap, infer_order
-    )
-    effective_pids: list[int | None] = []
-    for index, (record, pid) in enumerate(zip(records, explicit_pids)):
-        if pid is None or pid not in pkgmap:
-            pid = order_pids.get(index) or _guess_pid(record.package_name, name_to_pid)
-        effective_pids.append(pid)
-
-    # An unnamed app that is the sole member of a package can borrow the
-    # license row's package name for display. It never affects alignment.
-    label_by_pid: dict[int, str] = {}
-    for record, pid in zip(records, effective_pids):
-        if pid is not None and pid not in label_by_pid:
-            label_by_pid[pid] = record.package_name
-    inferred_names = 0
-    if pkgmap:
-        for appid, pid in single_app_packages(pkgmap).items():
-            if str(appid) not in names and pid in label_by_pid:
-                label = label_by_pid[pid].strip()
-                if label:
-                    names[str(appid)] = label[:120]
-                    inferred_names += 1
-
-    games = [
-        Game(
-            appid=appid,
-            name=names.get(str(appid), f"App {appid}"),
-            playtime_minutes=playtimes.get(appid, 0),
-        )
-        for appid in owned
-    ] + [
-        Game(
-            appid=appid,
-            name=names.get(str(appid), f"App {appid}"),
-            playtime_minutes=playtimes.get(appid, 0),
-            family_shared=True,
-        )
-        for appid in family_shared
-    ]
-    by_id = {game.appid: game for game in games}
-    # Only personally-owned apps may be matched to license rows by name; a
-    # borrowed game with the same title must not steal a license record.
-    index = build_index(games[: len(owned)])
-
-    # The license page localizes package names, so rows like "米塔" cannot be
-    # matched to "MiSide" by string similarity. Steam's own appinfo cache has
-    # the localized names and their appids; use it as an exact lookup table.
-    alias_map: dict[str, int] = {}
     cache = appinfo_path(local.root) if local else None
     cache_bytes = b""
     if cache:
@@ -325,6 +331,135 @@ def load_bundle(path: str | Path, local: LocalSteam | None = None,
             cache_bytes = cache.read_bytes()
         except OSError:
             cache_bytes = b""
+
+    # Recover missing app names from local appinfo.vdf *before* building matching
+    # indices or borrowing package titles, filling gaps only (never overwriting).
+    cache_recovered_names = 0
+    if cache_bytes:
+        all_ids = owned + family_shared
+        gaps = {
+            appid for appid in all_ids
+            if not names.get(str(appid)) or str(names.get(str(appid), "")).startswith("App ")
+        }
+        if gaps:
+            recovered = read_app_names(cache_bytes, gaps)
+            for appid, label in recovered.items():
+                key = str(appid)
+                if not names.get(key) or str(names.get(key, "")).startswith("App "):
+                    names[key] = label
+                    cache_recovered_names += 1
+
+    online_recovered_names = 0
+    if online_names:
+        all_ids = owned + family_shared
+        gaps_list = [
+            appid for appid in all_ids
+            if not names.get(str(appid)) or str(names.get(str(appid), "")).startswith("App ")
+        ]
+        if gaps_list:
+            fetched = fetch_online_app_names(gaps_list)
+            for appid, label in fetched.items():
+                key = str(appid)
+                if not names.get(key) or str(names.get(key, "")).startswith("App "):
+                    names[key] = label
+                    online_recovered_names += 1
+
+    local_pkgmap = useful_packages(local.package_apps, owned_set) if local else {}
+    merged_raw = {**bundle_pkg_raw, **(local.package_apps if local else {})}
+    pkgmap = useful_packages(merged_raw, owned_set) if merged_raw else {}
+    name_to_pid: dict[str, int] = {}
+    exact_to_pid: dict[str, int] = {}
+    if pkgmap:
+        # A package that grants exactly one owned app can be identified by
+        # that app's name. This lets license rows without a packageid still
+        # use the exact package -> appid mapping. Ambiguous normalized keys
+        # shared by multiple distinct appids are excluded.
+        norm_appid: dict[str, int] = {}
+        ambiguous_norm: set[str] = set()
+        exact_appid: dict[str, int] = {}
+        ambiguous_exact: set[str] = set()
+        for pid, apps in sorted(pkgmap.items()):
+            if len(apps) != 1:
+                continue
+            aid = apps[0]
+            label = names.get(str(aid), "")
+            if not label or label.startswith("App "):
+                continue
+            ekey = _exact_key(label)
+            if ekey:
+                if ekey in exact_appid and exact_appid[ekey] != aid:
+                    ambiguous_exact.add(ekey)
+                else:
+                    exact_appid[ekey] = aid
+                    exact_to_pid.setdefault(ekey, pid)
+            nkey = normalize(label)
+            if nkey:
+                if nkey in norm_appid and norm_appid[nkey] != aid:
+                    ambiguous_norm.add(nkey)
+                else:
+                    norm_appid[nkey] = aid
+                    name_to_pid.setdefault(nkey, pid)
+        for ekey in ambiguous_exact:
+            exact_to_pid.pop(ekey, None)
+        for nkey in ambiguous_norm:
+            name_to_pid.pop(nkey, None)
+
+    order_pids = align_license_packages(
+        records, explicit_pids, data.get("owned_packages") or [], pkgmap, infer_order
+    )
+    effective_pids: list[int | None] = []
+    for index, (record, pid) in enumerate(zip(records, explicit_pids)):
+        if pid is None or pid not in pkgmap:
+            pid = order_pids.get(index) or _guess_pid(record.package_name, name_to_pid, exact_to_pid)
+        effective_pids.append(pid)
+
+    # An unnamed app that is the sole member of a package can borrow the
+    # cleaned license package name for display only. It never enters the
+    # matching index so package strings cannot leak into name matching.
+    label_by_pid: dict[int, str] = {}
+    for record, pid in zip(records, effective_pids):
+        if pid is not None and pid not in label_by_pid:
+            label_by_pid[pid] = record.package_name
+    inferred_names = 0
+    display_names = dict(names)
+    if pkgmap:
+        for appid, pid in single_app_packages(pkgmap).items():
+            if (not display_names.get(str(appid)) or str(display_names.get(str(appid), "")).startswith("App ")) \
+                    and pid in label_by_pid:
+                label = strip_promo_suffix(label_by_pid[pid])
+                if label:
+                    display_names[str(appid)] = label[:120]
+                    inferred_names += 1
+
+    games = [
+        Game(
+            appid=appid,
+            name=display_names.get(str(appid), f"App {appid}"),
+            playtime_minutes=playtimes.get(appid, 0),
+        )
+        for appid in owned
+    ] + [
+        Game(
+            appid=appid,
+            name=display_names.get(str(appid), f"App {appid}"),
+            playtime_minutes=playtimes.get(appid, 0),
+            family_shared=True,
+        )
+        for appid in family_shared
+    ]
+    by_id = {game.appid: game for game in games}
+    # Only personally-owned apps with real app names (not display-only borrowed
+    # package labels) may be matched to license rows by name; a borrowed game
+    # with the same title must not steal a license record.
+    index = build_index([
+        game for game in games[: len(owned)]
+        if str(game.appid) in names and not names[str(game.appid)].startswith("App ")
+    ])
+
+    # The license page localizes package names, so rows like "米塔" cannot be
+    # matched to "MiSide" by string similarity. Steam's own appinfo cache has
+    # the localized names and their appids; use it as an exact lookup table.
+    alias_map: dict[str, int] = {}
     if cache_bytes:
         wanted = [record.package_name for record in records
                   if CJK_RE.search(record.package_name)]
@@ -350,7 +485,7 @@ def load_bundle(path: str | Path, local: LocalSteam | None = None,
                     "由礼包包 → appid 精确对应" + ("（本机 Steam 缓存）" if local_pkgmap else ""))
             matches.append(MatchResult(
                 games=resolved, via="order" if from_order else "package",
-                score=0.9 if from_order else 1.0, note=note,
+                score=0.65 if from_order else 1.0, note=note,
             ))
         else:
             alias_appid = alias_map.get(normalize(record.package_name))
@@ -430,6 +565,8 @@ def load_bundle(path: str | Path, local: LocalSteam | None = None,
         "bundle_cache_packages": len(bundle_pkg_raw),
         "bundle_expanded_rows": expansion["expanded_rows"],
         "bundle_expanded_apps": expansion["expanded_apps"],
+        "cache_recovered_names": cache_recovered_names,
+        "online_recovered_names": online_recovered_names,
         "inferred_names": inferred_names,
         "auto_grant_appids": len(auto_grant),
         "owned_packages": len(data.get("owned_packages") or []),

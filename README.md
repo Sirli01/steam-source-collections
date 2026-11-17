@@ -102,9 +102,9 @@ cd steam-source-collections
 python -m steam_source_collections --auto --out out
 ```
 
-`--auto` 会**只读**完成这些事：定位本机 Steam 安装目录（Windows 注册表 / 常见路径 / Linux / macOS）、读取 SteamID64 和账号目录、识别现有收藏集格式、读取本地游玩时长、解析 `appcache/packageinfo.vdf` 得到「礼包包 → appid」精确映射、在下载目录里找到刚导出的 JSON，最后输出 `out/report.html`（可直接双击打开的完整分组网页）/ `report.md` / `mapping.csv` / `collections_plan.json`。这一步既补上浏览器路径缺失的时长，也能把无名称的 DLC／下架游戏按许可记录精确归组。
+`--auto` 会**只读**完成这些事：定位本机 Steam 安装目录（Windows 注册表 / 常见路径 / Linux / macOS）、读取 SteamID64 和账号目录、识别现有收藏集格式、读取本地游玩时长、只读提取 `appcache/appinfo.vdf` 补全缺失的游戏主名称与本地化别名、解析 `appcache/packageinfo.vdf` 得到「礼包包 → appid」精确映射、在下载目录里找到刚导出的 JSON，最后输出 `out/report.html`（可直接双击打开的完整分组网页）/ `report.md` / `mapping.csv` / `collections_plan.json`。这一步既补上浏览器路径缺失的时长与游戏名称，也能把无名称的 DLC／下架游戏按许可记录精确归组；如需额外联网补全剩余缺名游戏，可附加 `--online-names`（默认关闭）。
 
-本机缓存还用于一种**保守的顺序对齐**：许可页是「新→旧」，`rgOwnedPackages` 是「旧→新」，带真实 packageid 的行形成锚点，只在行数与包数严格 1:1 的空档里推定缺失的 packageid。推定结果在 `mapping.csv` 里以 `match_via=order` 标注，且不会覆盖已有明确证据。想只用直接证据可加 `--no-order-infer`。
+本机缓存还用于一种**保守的顺序对齐**：许可页是「新→旧」，`rgOwnedPackages` 是「旧→新」，带真实 packageid 的行形成锚点，只在行数与包数严格 1:1 的空档里推定缺失的 packageid。推定结果在 `mapping.csv` 里以 `match_via=order` 标注（置信分 `0.65`），且不会覆盖已有明确证据。想只用直接证据可加 `--no-order-infer`（或 `--strict-order`）。
 
 试用页是同一套规则的 JS 等价复刻：导出包路径与手动路径的九个分组都和 Python CLI 逐条对照过；两者结果一致。
 

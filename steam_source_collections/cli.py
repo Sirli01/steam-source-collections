@@ -61,8 +61,11 @@ def build_parser() -> argparse.ArgumentParser:
                         help="同一游戏命中多条许可时的取舍，默认付费优先")
     parser.add_argument("--threshold", type=float, default=0.86, help="模糊匹配阈值，默认 0.86")
     parser.add_argument("--no-extra-groups", action="store_true", help="不生成交叉分组")
-    parser.add_argument("--no-order-infer", action="store_true",
+    parser.add_argument("--no-order-infer", "--strict-order", dest="no_order_infer",
+                        action="store_true",
                         help="只用直接证据对齐，不用本机缓存的许可行顺序推定礼包包")
+    parser.add_argument("--online-names", action="store_true",
+                        help="可选：联网查询缺失的游戏名称（默认关闭，仅在本地补全之后使用）")
     parser.add_argument("--writeback", help="实验性：Steam 本地收藏集 JSON 路径；--auto 时自动定位")
     parser.add_argument("--apply", action="store_true", help="实验性：真正写入 Steam 收藏集（需 --yes；--auto 会自动定位文件）")
     parser.add_argument("--yes", action="store_true", help="确认写入")
@@ -103,7 +106,8 @@ def main(argv: list[str] | None = None) -> int:
         bundle_meta: dict = {}
         if bundle_path:
             bundle = load_bundle(bundle_path, local, args.threshold,
-                                 infer_order=not args.no_order_infer)
+                                 infer_order=not args.no_order_infer,
+                                 online_names=args.online_names)
             records, games, matches = bundle.records, bundle.games, bundle.matches
             bundle_meta = bundle.meta
             owned_source = f"一键导出包 {Path(bundle_path).name}"
@@ -111,9 +115,8 @@ def main(argv: list[str] | None = None) -> int:
             for warning in bundle.meta.get("warnings") or []:
                 print("  ⚠️ " + warning)
             if bundle.meta["unnamed_apps"] and not bundle.meta.get("warnings"):
-                print(f"  · 有 {bundle.meta['unnamed_apps']} 款游戏没拿到名称，"
-                      "多为 DLC / 已下架 / 试玩项目，商店接口本来就不返回，重导也补不回来；"
-                      "本机 packageinfo.vdf 已尽量按礼包包把它们对齐。")
+                print(f"  · 仍有 {bundle.meta['unnamed_apps']} 款游戏在 Steam 数据库中无名称记录"
+                      "（多为已下架 / 内部测试 / 散装 DLC），本机缓存已尽量按礼包包归组。")
         else:
             if not args.licenses:
                 parser.error("手动模式需要 --licenses；想全自动请用 --auto")

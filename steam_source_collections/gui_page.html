@@ -166,7 +166,16 @@ code{background:var(--chip);padding:1px 5px;font-size:12px}
 .group .label{grid-column:2;grid-row:1;font-size:13.5px;font-weight:800;min-width:0;overflow-wrap:anywhere}
 .group .sample{grid-column:2;grid-row:2;font-size:11.5px;color:var(--ink2);
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.group .group-bar{grid-column:1 / -1;height:3px;background:var(--chip);margin-top:8px;overflow:hidden}
+.group .group-bar i{display:block;height:100%;background:var(--ink);transition:width .25s ease}
 .group.unknown .n{background:var(--signal);color:var(--on-signal);padding:0 7px;justify-self:start}
+.group.unknown .group-bar i{background:var(--signal)}
+.cross-bar{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.cross-chip{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--rule);
+  background:var(--panel);padding:6px 11px;font-size:12px;color:var(--ink)}
+.cross-chip b{font-variant-numeric:tabular-nums;font-weight:800}
+.note-list{margin:0;padding-left:18px}
+.note-list li{margin:4px 0}
 .meta-line{font-size:12px;color:var(--ink2);margin-top:14px;overflow-wrap:anywhere;
   font-variant-numeric:tabular-nums}
 
@@ -288,6 +297,7 @@ body.dragging .drop{display:grid}
         <label class="check" style="margin:0;font-size:12.5px"><input type="checkbox" id="optInferOrder" checked><span>启用本机缓存顺序对齐（推荐）</span></label>
         <label class="check" style="margin:0;font-size:12.5px"><input type="checkbox" id="optConflictLatest"><span>同一游戏多条许可时按最新日期优先（默认付费优先）</span></label>
         <label class="check" style="margin:0;font-size:12.5px"><input type="checkbox" id="optWriteCross"><span>写入 Steam 时同时创建交叉分组（吃灰区 / 真的玩过 / 付费未启动）</span></label>
+        <label class="check" style="margin:0;font-size:12.5px"><input type="checkbox" id="optOnlineNames"><span>联网补全剩余缺名游戏（可选，默认关闭）</span></label>
       </div>
     </details>
     <div id="frameBox" style="display:none">
@@ -300,6 +310,7 @@ body.dragging .drop{display:grid}
     <h2><span class="num">02</span> 统计结果</h2>
     <div id="resultSummary" class="lead"></div>
     <div class="groups" id="groups"></div>
+    <div class="cross-bar" id="crossBar"></div>
     <div class="meta-line" id="resultMeta"></div>
     <div class="hint" id="resultNotes"></div>
     <div class="btn-row" style="margin-top:14px">
@@ -405,16 +416,27 @@ function renderState(s){
 function renderResult(d){
   latest=d;lastGroups=d.groups||[];
   const g=lastGroups,src=g.filter(x=>x.kind==="source"),cross=g.filter(x=>x.kind!=="source");
+  const totalSrc=src.reduce((s,x)=>s+(x.count||0),0)||1;
   $("resultCard").style.display="block";
   $("resultSummary").innerHTML=`已解析 <b>${d.meta.license_rows}</b> 行许可、<b>${d.meta.owned_apps}</b> 款自己的游戏`+
     (d.meta.family_apps?`、<b>${d.meta.family_apps}</b> 款家庭共享游戏`:"")+`，结果如下。`;
-  $("groups").innerHTML=src.map(x=>`<div class="group ${x.id==="unknown"?"unknown":""}">
-    <div class="n">${x.count}</div><div class="label">${esc(x.name)}</div>
-    <div class="sample">${esc(x.sample.length?x.sample.join("、"):"—")}</div></div>`).join("");
-  $("resultMeta").textContent=(cross.length?`另有 ${cross.length} 个交叉分组（`+cross.map(x=>x.name+" "+x.count).join(" · ")+`）`
-      :`这份数据不含游玩时长，未生成交叉分组`)+
-    ` · 精确对齐 ${d.meta.explicit_appid_rows} 行 · 本机缓存 ${d.meta.local_cache_packages} 个礼包包`;
-  $("resultNotes").textContent=(d.notes||[]).join(" ");
+  $("groups").innerHTML=src.map(x=>{
+    const pct=x.count?Math.max(2,Math.round(100*x.count/totalSrc)):0;
+    return `<div class="group ${x.id==="unknown"?"unknown":""}">
+      <div class="n">${x.count}</div><div class="label">${esc(x.name)}</div>
+      <div class="sample">${esc(x.sample.length?x.sample.join("、"):"—")}</div>
+      <div class="group-bar"><i style="width:${pct}%"></i></div></div>`;
+  }).join("");
+  $("crossBar").innerHTML=cross.length
+    ? cross.map(x=>`<span class="cross-chip">${esc(x.name)} <b>${x.count}</b></span>`).join("")
+    : `<span class="cross-chip">未生成交叉分组（缺少游玩时长）</span>`;
+  const recNames=d.meta.cache_recovered_names?` · appinfo 补全 ${d.meta.cache_recovered_names} 个名称`:"";
+  const netNames=d.meta.online_recovered_names?` · 联网补全 ${d.meta.online_recovered_names} 个名称`:"";
+  $("resultMeta").textContent=`精确对齐 ${d.meta.explicit_appid_rows} 行 · 本机缓存 ${d.meta.local_cache_packages} 个礼包包${recNames}${netNames}`;
+  const notes=d.notes||[];
+  $("resultNotes").innerHTML=notes.length
+    ? `<ul class="note-list">${notes.map(n=>`<li>${esc(n)}</li>`).join("")}</ul>`
+    : "已就绪。";
   const pre=d.preflight||{};
   $("btnApply").disabled=!pre.writable;
   if(!pre.writable)note("写入不可用："+(pre.reason||"收藏集文件结构未识别"),"warn");
@@ -441,7 +463,8 @@ async function analyse(){
     const opt={
       infer_order:$("optInferOrder").checked,
       conflict:$("optConflictLatest").checked?"latest":"priority",
-      include_cross:$("optWriteCross").checked
+      include_cross:$("optWriteCross").checked,
+      online_names:$("optOnlineNames").checked
     };
     const d=await api("/api/report",opt);
     renderResult(d);renderState(d.state);
@@ -526,7 +549,7 @@ $("btnCopyAll").onclick=async()=>{const text=lastGroups.map(g=>`${g.name}（${g.
   try{await navigator.clipboard.writeText(text);note("分组清单已复制。","ok");}catch(e){note("复制失败。","warn");}};
 $("btnApply").onclick=()=>applyModal();
 $("btnRestore").onclick=()=>modal({title:"还原 Steam 收藏集？",
-  html:`<p>会把最近一次自动备份复制回去，撤销本工具的写入。</p><div class="hint warn">请先完全退出 Steam 客户端。</div>`,
+  html:`<p>会把最近一次自动备份还原回去，撤销本工具的写入。</p><div class="hint warn">若 Steam 已开启本机接口会直接通过客户端还原；否则请先完全退出 Steam 客户端再确认还原。</div>`,
   check:"我确认要还原",danger:true,okText:"确认还原",
   onConfirm:async()=>{try{const d=await api("/api/restore",{});note("✅ 已还原："+d.backup,"ok");renderState(d.state);}
     catch(e){note("✗ "+e.message,"warn");}}});

@@ -31,7 +31,7 @@ STEAMID64_BASE = 76561197960265728
 BUNDLE_GLOB = "steam-licenses-*.json"
 
 _MAX_VDF_CACHE = 4
-_PLAYTIME_CACHE: dict[tuple[str, int, int], dict[int, int]] = {}
+_LOCALCONFIG_CACHE: dict[tuple[str, int, int], tuple[dict[int, int], dict[int, int]]] = {}
 _PACKAGE_CACHE: dict[tuple[str, int, int], dict[int, list[int]]] = {}
 
 
@@ -60,6 +60,10 @@ class LocalSteam:
     cloud_format: str = "missing"  # kv-pairs | dict | missing | unreadable
     collections: list[dict] = field(default_factory=list)
     playtimes: dict[int, int] = field(default_factory=dict)
+    last_played: dict[int, int] = field(default_factory=dict)
+    unlocked_achievement_appids: set[int] = field(default_factory=set)
+    defined_achievement_appids: set[int] = field(default_factory=set)
+    saved_appids: set[int] = field(default_factory=set)
     package_apps: dict[int, list[int]] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
 
@@ -276,23 +280,192 @@ def read_collections(path: Path) -> tuple[str, list[dict]]:
     return "unreadable", []
 
 
-def read_playtimes(path: Path) -> dict[int, int]:
-    """Extract ``appid -> playtime`` from localconfig.vdf (text VDF)."""
+def _read_localconfig_apps(path: Path) -> tuple[dict[int, int], dict[int, int]]:
+    """Extract ``(playtimes, last_played)`` per appid from localconfig.vdf."""
     if not path.is_file():
-        return {}
+        return {}, {}
     key = _file_cache_key(path)
-    if key and key in _PLAYTIME_CACHE:
-        return dict(_PLAYTIME_CACHE[key])
+    if key and key in _LOCALCONFIG_CACHE:
+        pt, lp = _LOCALCONFIG_CACHE[key]
+        return dict(pt), dict(lp)
     text = path.read_text(encoding="utf-8-sig", errors="replace")
-    result: dict[int, int] = {}
+    playtimes: dict[int, int] = {}
+    last_played: dict[int, int] = {}
     for match in re.finditer(r'"(\d{2,8})"\s*\{', text):
+        appid = int(match.group(1))
         window = text[match.end(): match.end() + 1500]
         playtime = re.search(r'"Playtime"\s*"(\d+)"', window)
         if playtime:
-            result[int(match.group(1))] = int(playtime.group(1))
+            playtimes[appid] = int(playtime.group(1))
+        last = re.search(r'"LastPlayed"\s*"(\d+)"', window)
+        if last:
+            last_played[appid] = int(last.group(1))
     if key:
-        _cache_put(_PLAYTIME_CACHE, key, dict(result))
-    return result
+        _cache_put(_LOCALCONFIG_CACHE, key, (dict(playtimes), dict(last_played)))
+    return playtimes, last_played
+
+
+def read_playtimes(path: Path) -> dict[int, int]:
+    """Extract ``appid -> playtime`` from localconfig.vdf (text VDF)."""
+    return _read_localconfig_apps(path)[0]
+
+
+def read_last_played(path: Path) -> dict[int, int]:
+    """Extract ``appid -> LastPlayed`` unix timestamps from localconfig.vdf."""
+    return _read_localconfig_apps(path)[1]
+
+
+def read_play_signals(root: Path, id3: str) -> tuple[set[int], set[int], set[int]]:
+    """Read achievement and local-save signals from Steam's local folders.
+
+    Returns ``(unlocked_ach, defined_ach, saved_appids)``. Strictly read-only.
+    """
+    unlocked_ach: set[int] = set()
+    defined_ach: set[int] = set()
+    saved_appids: set[int] = set()
+
+    stats_dir = root / "appcache" / "stats"
+    if stats_dir.is_dir():
+        schema_re = re.compile(r"UserGameStatsSchema_(\d+)\.bin")
+        user_re = re.compile(rf"UserGameStats_{re.escape(id3)}_(\d+)\.bin")
+        for path in stats_dir.iterdir():
+            if not path.is_file():
+                continue
+            m = schema_re.fullmatch(path.name)
+            if m:
+                try:
+                    raw = path.read_bytes()
+                except OSError:
+                    continue
+                low = raw.lower()
+                if b"achievements" in low or b"bits" in low:
+                    defined_ach.add(int(m.group(1)))
+                continue
+            m = user_re.fullmatch(path.name)
+            if m:
+                try:
+                    raw = path.read_bytes()
+                except OSError:
+                    continue
+                if b"AchievementTimes" in raw or len(raw) > 45:
+                    aid = int(m.group(1))
+                    unlocked_ach.add(aid)
+                    defined_ach.add(aid)
+
+    user_dir = root / "userdata" / id3
+    libcache_dir = user_dir / "config" / "librarycache"
+    progress_file = libcache_dir / "achievement_progress.json"
+    if progress_file.is_file():
+        try:
+            doc = json.loads(progress_file.read_text(encoding="utf-8-sig", errors="replace"))
+            entries = doc.get("mapCache") if isinstance(doc, dict) else doc
+            if isinstance(entries, list):
+                for item in entries:
+                    if isinstance(item, list) and len(item) >= 2 and isinstance(item[1], dict):
+                        meta = item[1]
+                        aid_raw = meta.get("appid", item[0])
+                    elif isinstance(item, dict):
+                        meta = item
+                        aid_raw = meta.get("appid")
+                    else:
+                        continue
+                    try:
+                        aid = int(aid_raw)
+                    except (TypeError, ValueError):
+                        continue
+                    total = int(meta.get("total") or 0)
+                    unlocked = int(meta.get("unlocked") or 0)
+                    pct = float(meta.get("percentage") or 0)
+                    if total > 0:
+                        defined_ach.add(aid)
+                    if unlocked > 0 or pct > 0:
+                        unlocked_ach.add(aid)
+                        defined_ach.add(aid)
+        except (OSError, ValueError, TypeError):
+            pass
+
+    if libcache_dir.is_dir():
+        for path in libcache_dir.glob("*.json"):
+            if not path.stem.isdigit():
+                continue
+            aid = int(path.stem)
+            try:
+                text = path.read_text(encoding="utf-8-sig", errors="replace")
+            except OSError:
+                continue
+            if '"bAchieved":true' in text or '"bAchieved": true' in text:
+                unlocked_ach.add(aid)
+                defined_ach.add(aid)
+            elif '"vecUnachieved":[{' in text or '"vecHighlight":[{' in text:
+                defined_ach.add(aid)
+
+    if user_dir.is_dir():
+        for sub in user_dir.iterdir():
+            if not sub.is_dir() or not sub.name.isdigit() or sub.name in ("7", "760"):
+                continue
+            try:
+                if next((p for p in sub.rglob("*") if p.is_file()), None) is not None:
+                    saved_appids.add(int(sub.name))
+            except OSError:
+                continue
+
+    return unlocked_ach, defined_ach, saved_appids
+
+
+def detect_idled_appids(
+    playtimes: dict[int, int],
+    unlocked_ach: set[int],
+    defined_ach: set[int],
+    saved_appids: set[int],
+    last_played: dict[int, int] | None = None,
+    card_appids: set[int] | None = None,
+) -> set[int]:
+    """Identify played appids that appear to be card-idled (experimental).
+
+    Card drops on Steam take roughly 1 to 7.7 hours (60..460 minutes). Short
+    launches under 60 minutes and long play sessions over 460 minutes are never
+    classified as card-idling. Returns an empty set when no local achievement
+    or save signals exist.
+    """
+    if not defined_ach and not unlocked_ach and not saved_appids:
+        return set()
+    lp = last_played or {}
+    candidates = [
+        appid
+        for appid, minutes in playtimes.items()
+        if 60 <= minutes <= 460
+        and appid not in unlocked_ach
+        and appid not in saved_appids
+    ]
+    if not candidates:
+        return set()
+
+    min_counts: dict[int, int] = {}
+    day_counts: dict[int, int] = {}
+    for appid in candidates:
+        m = playtimes[appid]
+        min_counts[m] = min_counts.get(m, 0) + 1
+        ts = lp.get(appid, 0)
+        if ts > 100_000:
+            day = ts // 86400
+            day_counts[day] = day_counts.get(day, 0) + 1
+
+    has_card_signal = bool(card_appids)
+    cards = card_appids or set()
+    idled: set[int] = set()
+    for appid in candidates:
+        m = playtimes[appid]
+        ts = lp.get(appid, 0)
+        in_batch_day = ts > 100_000 and day_counts.get(ts // 86400, 0) >= 2
+        if has_card_signal and appid not in cards and not in_batch_day:
+            continue
+        in_time_cluster = min_counts.get(m, 0) >= 2 and 115 <= m <= 360
+        has_ach = appid in defined_ach
+        if m >= 90 and (has_ach or in_batch_day or in_time_cluster):
+            idled.add(appid)
+        elif 60 <= m < 90 and has_ach and (in_batch_day or min_counts.get(m, 0) >= 2):
+            idled.add(appid)
+    return idled
 
 
 def _read_package_apps_cached(path: Path) -> dict[int, list[int]]:
@@ -349,9 +522,14 @@ def discover(explicit: str | Path | None = None,
     else:
         info.notes.append("没有找到 cloud-storage-namespace-1.json（新版客户端可能用 LevelDB）")
 
-    info.playtimes = read_playtimes(config / "localconfig.vdf")
+    info.playtimes, info.last_played = _read_localconfig_apps(config / "localconfig.vdf")
     if not info.playtimes:
         info.notes.append("localconfig.vdf 中没有读到游玩时长")
+    (
+        info.unlocked_achievement_appids,
+        info.defined_achievement_appids,
+        info.saved_appids,
+    ) = read_play_signals(info.root, info.id3)
 
     cache = package_cache_path(info.root)
     if cache:

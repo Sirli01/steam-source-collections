@@ -17,6 +17,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import re
 import socket
 import struct
 import urllib.request
@@ -197,7 +198,30 @@ def probe() -> dict:
 """)
 
 
-PREFIX = "[来源] "
+PREFIX = "✥ "
+LEGACY_PREFIX = "[来源] "
+MANAGED_NUMS = tuple("①②③④⑤⑥⑦⑧⑨")
+_LEGACY_NUM_RE = re.compile(r"^[①②③④⑤⑥⑦⑧⑨][bc]?\s*")
+
+
+def is_managed_name(name: str, prefix: str = PREFIX) -> bool:
+    """True when a collection name belongs to this tool (current or legacy)."""
+    text = str(name or "")
+    return (
+        (bool(prefix) and text.startswith(prefix))
+        or text.startswith(PREFIX)
+        or text.startswith(LEGACY_PREFIX)
+        or text.startswith(MANAGED_NUMS)
+    )
+
+
+def strip_managed_prefix(name: str) -> str:
+    """Remove ``✥ ``, legacy ``[来源] `` prefix, and leading circled numbers."""
+    text = str(name or "")
+    for head in (PREFIX, LEGACY_PREFIX):
+        if text.startswith(head):
+            text = text[len(head):]
+    return _LEGACY_NUM_RE.sub("", text)
 
 
 def list_managed(prefix: str = PREFIX) -> list[dict]:
@@ -207,8 +231,12 @@ def list_managed(prefix: str = PREFIX) -> list[dict]:
 (() => {
   const cs = window.collectionStore;
   const map = cs.m_cloudStorageMap;
+  const prefix = %s;
   return cs.userCollections
-    .filter(c => String(c.m_strName || '').startsWith(%s))
+    .filter(c => {
+      const n = String(c.m_strName || '');
+      return (prefix && n.startsWith(prefix)) || n.startsWith("✥ ") || n.startsWith("[来源] ") || /^[①②③④⑤⑥⑦⑧⑨]/.test(n);
+    })
     .map(c => {
       let obj = {};
       try { obj = map.GetObject(c.m_strId) || {}; } catch (e) {}
@@ -224,7 +252,7 @@ def list_managed(prefix: str = PREFIX) -> list[dict]:
     # Belt and braces: never act on anything that is not one of our groups,
     # even if a client update changes the JS filter above.
     return [item for item in (result or [])
-            if str(item.get("name", "")).startswith(prefix)]
+            if is_managed_name(item.get("name", ""), prefix)]
 
 
 def save_many(items: list[dict], timeout: float = 40.0) -> list[dict]:
@@ -280,7 +308,8 @@ def delete_many(ids: list[str], prefix: str = PREFIX, timeout: float = 20.0) -> 
     try {
       const col = cs.GetCollection(id);
       if (!col) { out.push({id, ok: true, skipped: true}); continue; }
-      if (!String(col.m_strName || '').startsWith(prefix)) {
+      const n = String(col.m_strName || '');
+      if (!((prefix && n.startsWith(prefix)) || n.startsWith("✥ ") || n.startsWith("[来源] ") || /^[①②③④⑤⑥⑦⑧⑨]/.test(n))) {
         out.push({id, ok: false, error: 'refused non-managed collection'});
         continue;
       }

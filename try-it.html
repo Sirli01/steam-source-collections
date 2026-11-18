@@ -23,35 +23,35 @@
   }
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--text);
-    font:14px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;}
+    font:15px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;}
   .wrap{max-width:1240px;margin:0 auto;padding:28px 22px 56px}
   header{display:flex;flex-wrap:wrap;align-items:flex-start;gap:14px;justify-content:space-between;margin-bottom:20px}
-  h1{font-size:22px;margin:0 0 6px;letter-spacing:-.3px}
-  .sub{color:var(--muted);font-size:13px;margin:0}
+  h1{font-size:24px;margin:0 0 6px;letter-spacing:-.3px}
+  .sub{color:var(--muted);font-size:14px;margin:0}
   .badge{display:inline-flex;align-items:center;gap:7px;background:var(--accent-soft);color:var(--accent);
     border:1px solid color-mix(in srgb,var(--accent) 26%,transparent);
-    padding:7px 12px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap}
+    padding:7px 12px;border-radius:999px;font-size:13px;font-weight:600;white-space:nowrap}
   .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow)}
-  .card h2{font-size:14px;margin:0;padding:14px 16px;border-bottom:1px solid var(--border);
+  .card h2{font-size:16px;margin:0;padding:15px 16px;border-bottom:1px solid var(--border);
     display:flex;justify-content:space-between;align-items:center}
-  .card h2 small{font-weight:400;color:var(--muted);font-size:12px}
+  .card h2 small{font-weight:400;color:var(--muted);font-size:12.5px}
   .body{padding:16px}
-  .layout{display:grid;grid-template-columns:400px minmax(0,1fr);gap:18px;align-items:start}
+  .layout{display:grid;grid-template-columns:420px minmax(0,1fr);gap:18px;align-items:start}
   @media (max-width:900px){.layout{grid-template-columns:1fr}}
 
-  .step{display:flex;gap:12px;margin-bottom:16px}
-  .step .n{flex:0 0 24px;height:24px;border-radius:50%;background:var(--accent);color:#fff;
-    font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-top:2px}
-  .step .txt{flex:1;font-size:12.5px;line-height:1.7}
+  .step{display:flex;gap:12px;margin-bottom:18px}
+  .step .n{flex:0 0 26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;
+    font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-top:2px}
+  .step .txt{flex:1;font-size:14.5px;line-height:1.7}
   .step b{font-weight:700}
   a{color:var(--accent)}
-  .bookmark{display:inline-flex;align-items:center;gap:6px;margin-top:7px;padding:9px 14px;
+  .bookmark{display:inline-flex;align-items:center;gap:6px;margin-top:8px;padding:10px 16px;
     background:var(--accent);color:#fff!important;text-decoration:none;border-radius:8px;
-    font-size:12.5px;font-weight:700;cursor:grab;box-shadow:var(--shadow)}
+    font-size:14px;font-weight:700;cursor:grab;box-shadow:var(--shadow)}
   .bookmark:hover{filter:brightness(1.08)}
   pre.cmd{background:var(--panel-2);border:1px solid var(--border);border-radius:9px;padding:10px 12px;
-    overflow:auto;font:11.5px/1.7 ui-monospace,SFMono-Regular,Consolas,monospace;margin:8px 0 0;white-space:pre-wrap}
-  .hint{font-size:11.5px;color:var(--muted);line-height:1.7;margin:0}
+    overflow:auto;font:12.5px/1.7 ui-monospace,SFMono-Regular,Consolas,monospace;margin:8px 0 0;white-space:pre-wrap}
+  .hint{font-size:13px;color:var(--muted);line-height:1.7;margin:0}
   .why{margin-top:16px;background:var(--warn-bg);border:1px solid color-mix(in srgb,var(--warn) 35%,transparent);
     border-radius:10px;padding:12px 13px;font-size:12px;line-height:1.75}
   .why b{color:var(--warn)}
@@ -185,12 +185,15 @@
         <div class="body">
           <div class="step">
             <div class="n">1</div>
-            <div class="txt"><b>把蓝色按钮拖到浏览器书签栏</b>（只做这一次，以后一直能用；没看到书签栏按 <code>Ctrl+Shift+B</code>）。
-              <div class="bookmark-row"><a id="bmLink" class="bookmark" href="#" title="拖我到书签栏">📌 导出 Steam 许可</a></div>
-              <div class="caution">⚠️ <b>不要在这个试用页上点它。</b>这个按钮只有在第 2 步打开的 <b>Steam 许可页</b>上点才有效，在这里点不会有任何反应。</div>
-              <div class="caution" style="margin-top:7px">🔄 <b>之前拖过书签的话，请删掉旧书签、重新拖这个。</b>点书签时右上角面板标题带 <code>v4</code> 就是当前版本。</div>
+            <div class="txt"><b>把下面这个蓝色的「📌 导出 Steam 许可」按钮，按住拖到浏览器顶部书签栏</b>（只做这一次，以后一直能用；没看到书签栏按 <code>Ctrl+Shift+B</code>）。
+              <div class="bookmark-row" style="display:flex;flex-wrap:wrap;align-items:center;gap:8px">
+                <a id="bmLink" class="bookmark" href="#" title="按住鼠标左键拖我到书签栏">📌 导出 Steam 许可</a>
+                <span style="font-size:12.5px;font-weight:600;color:var(--accent)">← 按住左键拖到顶部书签栏</span>
+              </div>
+              <div class="caution" style="font-size:12.5px">⚠️ <b>不要在这个试用页上直接点它。</b>它只在第 2 步打开的 <b>Steam 许可页</b>上才有效，在这里点不会运行。</div>
+              <div class="caution" style="margin-top:7px;font-size:12.5px">🔄 <b>之前拖过书签的话，请删掉旧书签、重新拖这个。</b>点书签时右上角面板标题带 <code>v4</code> 就是当前版本。</div>
               <div class="hint" style="margin-top:7px">
-                拖不动？<button class="btn" id="copyBm" style="padding:4px 10px;font-size:11px">复制书签代码</button>
+                拖不动？<button class="btn" id="copyBm" style="padding:5px 11px;font-size:12px">复制书签代码</button>
                 <span id="copyStatus"></span> → 右键书签栏 →「添加网页」，网址粘贴进去即可。
               </div>
             </div>
@@ -218,7 +221,7 @@
         <div class="body">
           <p style="margin:0 0 9px">许可页只给包名，商店接口又不返回 DLC／已下架项目的名称，所以网页里会有一些游戏落在⑥。本机 Steam 客户端缓存里存着「礼包包 → 游戏」的精确对照表，<b>工具会自己找到并只读解析</b>，它不记录来源、也不含你账号的隐私。</p>
           <div class="hint" style="margin:0 0 10px">
-            <b>最省事：启动图形界面</b>（双击项目里的「启动 Steam 分组工具.bat」或桌面图标）。<b>第一次先照上面的三步导出一次数据</b>，之后每次打开点「一键统计 →」就行：它会自动定位 Steam、读取缓存、找到导出包，然后<b>直接显示完整报告</b>，还能一键写入收藏集。你不需要知道文件在哪，也不用敲命令。
+            <b>最省事：启动图形界面</b>（双击项目里的「双击启动.bat」或桌面图标）。<b>第一次先照上面的三步导出一次数据</b>，之后每次打开点「一键统计 →」就行：它会自动定位 Steam、读取缓存、找到导出包，然后<b>直接显示完整报告</b>，还能一键写入收藏集。你不需要知道文件在哪，也不用敲命令。
           </div>
           <details>
             <summary style="cursor:pointer">只想用这个网页？展开这里（需手动选一次缓存文件）</summary>
@@ -878,7 +881,12 @@
               .replace(/\s{2,}/g,' ')
               .trim();
   var bmUrl='javascript:'+code;
-  document.getElementById('bmLink').href=bmUrl;
+  var bmEl=document.getElementById('bmLink');
+  bmEl.href=bmUrl;
+  bmEl.addEventListener('click',function(e){
+    e.preventDefault();
+    alert('不要在这个页面直接点它！\n\n请按住这个蓝色「📌 导出 Steam 许可」按钮，把它拖到浏览器顶部的书签栏（没显示书签栏按 Ctrl+Shift+B）；\n如果拖不动，点下面的「复制书签代码」，再右键书签栏 → 添加网页 粘贴到网址栏。\n\n放好书签后，点第 2 步「打开我的 Steam 许可页」，再在 Steam 页面里点那个书签。');
+  });
   document.getElementById('copyBm').addEventListener('click',function(){
     var label=document.getElementById('copyStatus');
     var ok=function(){label.textContent='已复制 ✓';};
@@ -953,7 +961,7 @@ const EDITION_PART_RE=new RegExp("^[\\s\\[\\]()（）]*(?:(?:standard|deluxe|ult
 const ALIAS_SPLIT_RE=/\s*(?:[-–—:：/|])\s*/;
 const CJK_RE=/[\u3400-\u4dbf\u4e00-\u9fff]/;
 function stripPromoSuffix(packageName){
-  const text=String(packageName||"").normalize("NFKC");
+  const text=String(packageName||"").replace(/[™®©]/g,"").normalize("NFKC");
   const cleaned=text.replace(PROMO_SUFFIX_RE," ").replace(/\s+/g," ").replace(/^[\s\-–—:：/|]+|[\s\-–—:：/|]+$/g,"");
   return cleaned||text.trim();
 }
@@ -1005,7 +1013,7 @@ function collectAliasVariants(text,out){
     out.push([stripped,"normalized"]);
 }
 function aliasCandidates(packageName){
-  const text=String(packageName||"").normalize("NFKC");
+  const text=String(packageName||"").replace(/[™®©]/g,"").normalize("NFKC");
   const cleaned=stripPromoSuffix(text);
   const out=[];
   if(cleaned&&normalize(cleaned)!==normalize(text)&&normalize(cleaned).length>=3)
@@ -1041,12 +1049,12 @@ function matchedLength(a,b){
 function ratio(a,b){ if(!a.length&&!b.length) return 1; return 2*matchedLength(a,b)/(a.length+b.length); }
 
 const GROUPS = [
-  ["store","① Steam 商店购买","var(--store)"],
-  ["retail","② CDK·Key 激活","var(--retail)"],
-  ["free","③ 免费领取·喜加一","var(--free)"],
-  ["gift","④ 赠礼·订阅","var(--gift)"],
-  ["family","⑤ 家庭共享（别人的）","var(--family)"],
-  ["unknown","⑥ 未能判定（需人工或 AI 兜底）","var(--unknown)"],
+  ["store","Steam购买","var(--store)"],
+  ["retail","CDK激活","var(--retail)"],
+  ["free","免费领取","var(--free)"],
+  ["gift","赠礼与订阅","var(--gift)"],
+  ["family","家庭共享","var(--family)"],
+  ["unknown","待核对","var(--unknown)"],
 ];
 const PRIORITY={family:100,store:5,retail:4,gift:3,free:2,unknown:0};
 const GROUP_NAME=Object.fromEntries(GROUPS.map(g=>[g[0],g[1]]));
@@ -1245,6 +1253,10 @@ function packageTitleScore(packageName,appName){
   let prefixLen=0;const minLen=Math.min(pKey.length,aKey.length);
   while(prefixLen<minLen&&pKey[prefixLen]===aKey[prefixLen])prefixLen++;
   if(prefixLen>=8&&prefixLen>=0.6*minLen)return 0.70+0.25*prefixLen/Math.max(pKey.length,aKey.length);
+  if(prefixLen>=5){
+    const rem=short.slice(prefixLen);
+    if(rem.length>=2&&long.slice(prefixLen).includes(rem))return 0.78+0.2*short.length/long.length;
+  }
   return 0;
 }
 function expandPackageMatches(records,matches,claimedPids,pkgMap,names,byId,threshold=0.76){
@@ -1301,6 +1313,14 @@ function expandPackageMatches(records,matches,claimedPids,pkgMap,names,byId,thre
       if(!labels.length)return;
       let best=0;
       for(const label of labels){const sc=packageTitleScore(rec.package_name,label);if(sc>best)best=sc;}
+      const extraLabels=extra.map(id=>String(names[String(id)]||"")).filter(l=>l&&!l.startsWith("App "));
+      const matchedTitles=m.games.map(g=>String(g.name||"")).filter(t=>t&&!t.startsWith("App "));
+      for(const mt of matchedTitles){
+        for(const el of extraLabels){
+          const sc=packageTitleScore(mt,el);
+          if(sc>best)best=sc;
+        }
+      }
       if(best>=threshold)scored.push([best,pid,apps,extra]);
     });
     if(!scored.length)return;
@@ -1456,8 +1476,11 @@ function matchPackage(pkg,idx,threshold=0.86){
       return{games:[...idx.get(ck)],via,score:0.95,
         note:via==="normalized"?"剥离版本 / 地区后缀后精确匹配":"双语包名中的名称精确匹配"};
   }
+  const hasVr=/\bvr\b/i.test(pkg);
+  const vrOk=cand=>!hasVr||(idx.get(cand)||[]).some(g=>/\bvr\b/i.test(g.name));
   const subs=[];
   for(const cand of idx.keys()){
+    if(!vrOk(cand))continue;
     if(key.length<8||cand.length<8)continue;
     if(key.includes(cand)||cand.includes(key)){
       const ov=Math.min(key.length,cand.length)/Math.max(key.length,cand.length);
@@ -1468,7 +1491,7 @@ function matchPackage(pkg,idx,threshold=0.86){
   if(subs.length&&subs[0][0]>=0.85)
     return{games:[...idx.get(subs[0][1])],via:"substring",score:+subs[0][0].toFixed(3),note:""};
   let best=null,bestScore=0;
-  for(const cand of idx.keys()){const r=ratio(key,cand);if(r>bestScore){bestScore=r;best=cand;}}
+  for(const cand of idx.keys()){if(!vrOk(cand))continue;const r=ratio(key,cand);if(r>bestScore){bestScore=r;best=cand;}}
   if(best&&bestScore>=threshold)return{games:[...idx.get(best)],via:"fuzzy",score:+bestScore.toFixed(3),note:""};
   const bundleText=stripPromoSuffix(pkg);
   if(/bundle|捆绑|合集|package|pack|礼包|包/i.test(bundleText)){
@@ -1527,10 +1550,13 @@ function buildPlan(records,games,family,conflict="priority",extra=true,matches=n
   const groups=GROUPS.map(([id,name,color])=>({id,name,color,kind:"source",
     appids:rows[id].map(r=>r.appid),games:rows[id]}));
   if(extra){
-    const free=rows.free,paid=[...rows.store,...rows.retail];
-    [["free_unplayed","③b 免费领取·从未启动（吃灰区）",free.filter(r=>r.playtime_minutes===0)],
-     ["free_played","③c 免费领取·真的玩过",free.filter(r=>r.playtime_minutes>0)],
-     ["paid_unplayed","⑦ 付费购入·从未启动",paid.filter(r=>r.playtime_minutes===0)]
+    const ownedRows=[...assignments.keys()].sort((a,b)=>a-b).map(id=>assignments.get(id)).filter(r=>r.group!=="family");
+    const played=ownedRows.filter(r=>r.playtime_minutes>0&&!r.idled);
+    const idled=ownedRows.filter(r=>r.playtime_minutes>0&&r.idled);
+    const unplayed=ownedRows.filter(r=>r.playtime_minutes===0);
+    [["played","真正玩过",played],
+     ["idled","挂卡刷时长（试验）",idled],
+     ["unplayed","从未启动",unplayed]
     ].forEach(([id,name,rs])=>groups.push({id,name,kind:"cross",appids:rs.map(r=>r.appid),games:rs}));
   }
   return{schema:"steam-source-collections/1",groups,
@@ -1573,7 +1599,7 @@ function render(plan,label){
   $("cross").innerHTML=plan.groups.filter(g=>g.kind==="cross").map(g=>
     `<div class="chip">${esc(g.name)} <b>${g.games.length}</b></div>`).join("")
     + (plan.no_playtime
-      ? `<div class="chip" style="border-color:var(--warn);color:var(--warn)">⚠ 本次导出包不含游玩时长，未生成「吃灰区 / 真的玩过 / 付费没启动」，以免给出错数字</div>`
+      ? `<div class="chip" style="border-color:var(--warn);color:var(--warn)">⚠ 本次导出包不含游玩时长，未生成「真正玩过 / 挂卡刷时长（试验） / 从未启动」，以免给出错数字</div>`
       : "");
   const issues=[
     ...plan.unmatched_licenses.map(r=>`<tr><td>${esc(r.date)}</td><td class="clip">${esc(r.package_name)}</td><td>${esc(r.method_raw)}</td><td>许可行没对上游戏：${esc(r.note||"未找到可靠匹配")}</td></tr>`),
@@ -1615,8 +1641,8 @@ function runBundle(text,filename){
     bullets.push(m.family_apps
       ? `⑤ 家庭共享读到 ${m.family_apps} 款家人借给你的游戏，已自动归组（它们不在你的许可页里，属正常情况）。`
       : `⑤ 家庭共享：这份包里没有借来的游戏清单；重新拖上面的按钮并在许可页点一次即可自动填好 ⑤ 组。`);
-    bullets.push(m.has_playtimes?`含 ${m.playtime_count} 条游玩时长，交叉分组可用。`:
-      `本次不含游玩时长，未生成「吃灰区 / 真的玩过」等交叉组，以免给出错数字；启动图形界面可补本机时长。`);
+    bullets.push(m.has_playtimes?`含 ${m.playtime_count} 条游玩时长，游玩状态分组可用。`:
+      `本次不含游玩时长，未生成「真正玩过 / 挂卡刷时长（试验） / 从未启动」等状态分组，以免给出错数字；启动图形界面可补本机时长并估算挂卡刷时长。`);
     setBanner("✅ 已完成："+filename,bullets);
     hero(`✅ 已读取 ${filename}，结果已生成（右侧）`,true);
   }

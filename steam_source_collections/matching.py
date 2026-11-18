@@ -55,11 +55,12 @@ EDITION_PART_RE = re.compile(
 )
 ALIAS_SPLIT_RE = re.compile(r"\s*(?:[-–—:：/|])\s*")
 CJK_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff]")
+VR_TOKEN_RE = re.compile(r"\bvr\b", re.I)
 
 
 def strip_promo_suffix(package_name: str) -> str:
     """Strip Steam's dated promotional / free-weekend tail from a package name."""
-    text = unicodedata.normalize("NFKC", package_name or "")
+    text = unicodedata.normalize("NFKC", re.sub(r"[™®©]", "", package_name or ""))
     cleaned = re.sub(r"\s+", " ", PROMO_SUFFIX_RE.sub(" ", text)).strip(" -–—:：/|")
     return cleaned or text.strip()
 
@@ -89,7 +90,7 @@ def alias_candidates(package_name: str) -> list[tuple[str, str]]:
     and taking the non-Chinese half of a bilingual name. Everything else keeps
     going through the original substring/fuzzy rules instead of being guessed.
     """
-    text = unicodedata.normalize("NFKC", package_name or "")
+    text = unicodedata.normalize("NFKC", re.sub(r"[™®©]", "", package_name or ""))
     cleaned = strip_promo_suffix(text)
     out: list[tuple[str, str]] = []
     if cleaned and normalize(cleaned) != normalize(text) and len(normalize(cleaned)) >= 3:
@@ -167,12 +168,19 @@ def match_package(package_name: str, index: dict[str, list[Game]], threshold: fl
                       else "双语包名中的名称精确匹配"),
             )
 
-    substrings = _substring_candidates(key, index)
+    has_vr = bool(VR_TOKEN_RE.search(package_name))
+    candidates = {
+        candidate: games
+        for candidate, games in index.items()
+        if not has_vr or any(VR_TOKEN_RE.search(game.name) for game in games)
+    }
+
+    substrings = _substring_candidates(key, candidates)
     if substrings and substrings[0][0] >= 0.85:
         score, candidate = substrings[0]
         return MatchResult(games=list(index[candidate]), via="substring", score=round(score, 3))
 
-    close = difflib.get_close_matches(key, list(index), n=1, cutoff=threshold)
+    close = difflib.get_close_matches(key, list(candidates), n=1, cutoff=threshold)
     if close:
         candidate = close[0]
         score = difflib.SequenceMatcher(None, key, candidate).ratio()

@@ -29,10 +29,10 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 
+from .cefbridge import LEGACY_PREFIX, PREFIX, is_managed_name
 from .local import read_collections
 from .plan import Plan
 
-PREFIX = "[来源] "
 NAMESPACE_INDEX_NAME = "cloud-storage-namespaces.json"
 
 
@@ -241,16 +241,33 @@ def steam_is_running() -> bool | None:
     return _steam_is_running()
 
 
-def _groups_to_write(plan: Plan, include_cross: bool = False) -> list[dict]:
+def target_groups(
+    plan: Plan,
+    include_cross: bool = False,
+    selected_groups: list[str] | set[str] | None = None,
+) -> list[dict]:
+    """Return non-empty collections to write based on checkbox selection."""
+    if selected_groups is not None:
+        wanted = {str(x) for x in selected_groups}
+        return [
+            g for g in plan.groups
+            if (g.get("id") in wanted or g.get("name") in wanted) and g.get("appids")
+        ]
     allowed = ("source", "cross") if include_cross else ("source",)
     return [g for g in plan.groups if g.get("kind") in allowed and g.get("appids")]
 
 
-def preview(path: Path, plan: Plan, include_cross: bool = False) -> dict:
+def preview(
+    path: Path,
+    plan: Plan,
+    include_cross: bool = False,
+    selected_groups: list[str] | set[str] | None = None,
+) -> dict:
     schema, entries = read_collections(path)
     common = {
         "collections_to_write": [
-            PREFIX + group["name"] for group in _groups_to_write(plan, include_cross)
+            PREFIX + group["name"]
+            for group in target_groups(plan, include_cross, selected_groups)
         ],
     }
     if schema == "kv-pairs":
@@ -265,14 +282,14 @@ def preview(path: Path, plan: Plan, include_cross: bool = False) -> dict:
         # always emit a one-click restore script.
         return {
             **common,
-            "format": "kv-pairs（新版键值格式 · 只追加新键）",
+            "format": "kv-pairs（新版键值格式 · 只追加本工具分组）",
             "writable": True,
-            "strategy": "只新增 [来源] 前缀的收藏集键，不修改任何现有收藏集；写入前双备份、原子替换",
+            "strategy": "只创建或更新「✥ 」符号前缀分组（并自动清理旧版序号或 [来源] 分组），不修改任何其它收藏集；写入前双备份、原子替换",
             "requires_steam_closed": True,
             "existing_collections": len(entries),
-            "existing_managed_collections": [e["name"] for e in entries if e["name"].startswith(PREFIX)],
+            "existing_managed_collections": [e["name"] for e in entries if is_managed_name(e["name"])],
             "caveat": "写入会同时抬高 Steam 的云同步版本计数；重新启动 Steam 客户端后，"
-                      "新分组才会上传到账号，Steam Deck 也要重启客户端才会看到。"
+                      "新分组才会同步到云端。"
                       "若出现云同步冲突提示，选择保留/上传本机版本。"
                       "若重启后没出现，在图形界面点「↩️ 一键还原」即可恢复（备用：out/restore-collections.bat）；"
                       "也可以完全不写入，直接用 report.html 里的「复制游戏名清单」在客户端手动建组。",
@@ -286,7 +303,7 @@ def preview(path: Path, plan: Plan, include_cross: bool = False) -> dict:
     existing = [
         value.get(name_key, "")
         for value in container.values()
-        if isinstance(value, dict) and str(value.get(name_key, "")).startswith(PREFIX)
+        if isinstance(value, dict) and is_managed_name(str(value.get(name_key, "")))
     ]
     return {
         **common,
@@ -301,8 +318,13 @@ def preview(path: Path, plan: Plan, include_cross: bool = False) -> dict:
     }
 
 
-def _write_kv_pairs(path: Path, plan: Plan, outdir: Path,
-                    include_cross: bool = False) -> list[Path]:
+def _write_kv_pairs(
+    path: Path,
+    plan: Plan,
+    outdir: Path,
+    include_cross: bool = False,
+    selected_groups: list[str] | set[str] | None = None,
+) -> list[Path]:
     """Append-only write for the modern ``[key, meta]`` collection store.
 
     Existing entries are never edited. Only ``[来源] `` keys previously
@@ -336,18 +358,18 @@ def _write_kv_pairs(path: Path, plan: Plan, outdir: Path,
             entry = json.loads(value)
         except json.JSONDecodeError:
             continue
-        if isinstance(entry, dict) and str(entry.get("name", "")).startswith(PREFIX):
+        if isinstance(entry, dict) and is_managed_name(str(entry.get("name", ""))):
             managed.add(key)
     data = [item for item in raw if item[0] not in managed]
 
-    target_groups = _groups_to_write(plan, include_cross)
-    if not target_groups:
-        raise WritebackError("计划里没有可写入的来源分组，拒绝写入")
+    chosen = target_groups(plan, include_cross, selected_groups)
+    if not chosen:
+        raise WritebackError("计划里没有可写入的分组，拒绝写入")
     alphabet = string.ascii_letters + string.digits
     now = int(datetime.now().timestamp())
     created: list[str] = []
     version = max_version
-    for group in target_groups:
+    for group in chosen:
         appids = sorted({int(a) for a in group["appids"] if str(a).isdigit()})
         if not appids:
             continue
@@ -405,15 +427,25 @@ def _write_kv_pairs(path: Path, plan: Plan, outdir: Path,
     print(f"[写回] 备份：{backups[0]} / {backups[1]}")
     if index_backup:
         print(f"[写回] 云同步版本计数已抬到 {version}：{path.parent / NAMESPACE_INDEX_NAME}")
-    print("[写回] 重新启动 Steam 后，新分组才会上传到账号（Steam Deck 也需重启客户端）。")
+    print("[写回] 重新启动 Steam 后，新分组才会同步到云端。")
     print(f"[写回] 若重启 Steam 后没出现，在图形界面点「一键还原」即可恢复；备用脚本：{restore}")
     return backups
 
 
-def apply(path: Path, plan: Plan, outdir: Path, include_cross: bool = False) -> list[Path]:
+def apply(
+    path: Path,
+    plan: Plan,
+    outdir: Path,
+    include_cross: bool = False,
+    selected_groups: list[str] | set[str] | None = None,
+) -> list[Path]:
     schema, _ = read_collections(path)
     if schema == "kv-pairs":
-        return _write_kv_pairs(path, plan, outdir, include_cross=include_cross)
+        return _write_kv_pairs(
+            path, plan, outdir,
+            include_cross=include_cross,
+            selected_groups=selected_groups,
+        )
     data = json.loads(path.read_text(encoding="utf-8-sig"))
     found = _find_container(data)
     if not found:
@@ -424,14 +456,14 @@ def apply(path: Path, plan: Plan, outdir: Path, include_cross: bool = False) -> 
     # Remove only collections previously created by this tool.
     for key in [
         key for key, value in container.items()
-        if isinstance(value, dict) and str(value.get(name_key, "")).startswith(PREFIX)
+        if isinstance(value, dict) and is_managed_name(str(value.get(name_key, "")))
     ]:
         del container[key]
 
-    target_groups = _groups_to_write(plan, include_cross)
-    if not target_groups:
+    chosen = target_groups(plan, include_cross, selected_groups)
+    if not chosen:
         raise WritebackError("所有可写入分组都是空的，拒绝写入")
-    for group in target_groups:
+    for group in chosen:
         appids = [appid if use_int else str(appid) for appid in group["appids"]]
         container[f"src_{group['id']}"] = {
             name_key: PREFIX + group["name"],

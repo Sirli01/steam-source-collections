@@ -39,52 +39,57 @@
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);
-  font:15px/1.6 "Segoe UI","Microsoft YaHei","PingFang SC",sans-serif}
+  font:16px/1.65 "Segoe UI","Microsoft YaHei","PingFang SC",sans-serif}
 button{font-family:inherit;cursor:pointer}
 button:focus-visible,a:focus-visible,summary:focus-visible{outline:2px solid var(--trace);outline-offset:2px}
 
-/* 深色命令栏：两套主题里都是深色 */
-.command{background:var(--command);color:var(--command-ink);min-height:54px;
-  display:flex;align-items:center;flex-wrap:wrap;gap:9px 20px;padding:8px 24px;
-  font-size:11.5px;letter-spacing:.14em;text-transform:uppercase}
-.command .brand{font-weight:800;letter-spacing:.2em;font-size:13px}
+/* 深色命令栏：两套主题里都是深色，吸顶固定便于随时跳转 */
+.topbar{position:sticky;top:0;z-index:40}
+.command{background:var(--command);color:var(--command-ink);min-height:56px;
+  display:flex;align-items:center;flex-wrap:wrap;gap:10px 22px;padding:10px 24px;
+  font-size:12.5px;letter-spacing:.14em;text-transform:uppercase}
+.command .brand{font-weight:800;letter-spacing:.2em;font-size:14px}
 .command .sep{width:1px;height:18px;background:#4A4A4A}
-.command a{color:var(--command-ink);text-decoration:none;opacity:.72;padding:5px 2px}
-.command a:hover{opacity:1}
-.command a.cur{background:var(--signal);color:var(--on-signal);opacity:1;
+.command a[data-target]{color:var(--command-ink);text-decoration:none;opacity:.72;padding:5px 2px}
+.command a[data-target]:hover{opacity:1}
+.command a[data-target].cur{background:var(--signal);color:var(--on-signal);opacity:1;
   font-weight:800;padding:5px 11px;letter-spacing:.1em}
-.command .right{margin-left:auto;display:flex;gap:18px;color:#A3A3A3;
+.command .right{margin-left:auto;display:flex;align-items:center;gap:14px;color:#A3A3A3;
   font-variant-numeric:tabular-nums;white-space:nowrap}
+.command .gh-link{display:inline-flex;align-items:center;gap:6px;color:var(--command-ink);
+  text-decoration:none;opacity:.85;padding:4px 9px;border:1px solid #4A4A4A;
+  font-size:12px;letter-spacing:.08em;text-transform:none;transition:background-color .16s,color .16s,border-color .16s}
+.command .gh-link:hover{opacity:1;background:var(--signal);color:var(--on-signal);border-color:var(--signal)}
 .tri{height:3px;display:flex}
 .tri i{flex:1}
 .tri i:nth-child(1){background:#FF00F0}
 .tri i:nth-child(2){background:var(--signal)}
 .tri i:nth-child(3){background:#9DF5C4}
 
-.wrap{max-width:1080px;margin:0 auto;padding:26px 24px 70px;
+.wrap{max-width:1080px;margin:0 auto;padding:28px 24px 72px;
   background-image:linear-gradient(var(--grid-line) 1px,transparent 1px),
                    linear-gradient(90deg,var(--grid-line) 1px,transparent 1px);
   background-size:28px 28px}
-.eyebrow{font-size:11px;font-weight:800;letter-spacing:.16em;color:var(--ink2);text-transform:uppercase}
-.card{border-top:1px solid var(--ink);padding:18px 0 22px;min-width:0;background:transparent}
-.card h2{margin:2px 0 8px;font-size:22px;font-weight:800;letter-spacing:-.01em;
+.eyebrow{font-size:12px;font-weight:800;letter-spacing:.16em;color:var(--ink2);text-transform:uppercase}
+.card{border-top:1px solid var(--ink);padding:20px 0 24px;min-width:0;background:transparent;scroll-margin-top:72px}
+.card h2{margin:4px 0 10px;font-size:24px;font-weight:800;letter-spacing:-.01em;
   display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.card h2 .num{font-size:10.5px;letter-spacing:.08em;background:var(--command);color:var(--command-ink);
-  padding:5px 9px;font-weight:800;flex:none;
+.card h2 .num{font-size:12px;letter-spacing:.08em;background:var(--command);color:var(--command-ink);
+  padding:5px 10px;font-weight:800;flex:none;
   clip-path:polygon(0 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%)}
 .card h2 .num::before{content:"NO."}
-.lead{color:var(--ink2);font-size:13px;margin:0 0 16px;max-width:780px;overflow-wrap:anywhere}
+.lead{color:var(--ink2);font-size:15px;line-height:1.7;margin:0 0 18px;max-width:820px;overflow-wrap:anywhere}
 
 /* 看板 / 状态 */
-.status-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:0 0 16px}
+.status-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:0 0 18px}
 .status{position:relative;background:var(--panel);border:1px solid var(--ink);
-  padding:13px 15px;min-width:0;overflow:hidden;
+  padding:14px 16px;min-width:0;overflow:hidden;
   clip-path:polygon(0 0,100% 0,100% calc(100% - 12px),calc(100% - 12px) 100%,0 100%)}
 .status::before{content:"";position:absolute;left:0;top:0;width:52px;height:5px;background:var(--command)}
-.status .t{color:var(--ink2);font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:700}
-.status .v{font-size:14px;font-weight:800;display:flex;align-items:center;gap:7px;
+.status .t{color:var(--ink2);font-size:12.5px;letter-spacing:.1em;text-transform:uppercase;font-weight:700}
+.status .v{font-size:16px;font-weight:800;display:flex;align-items:center;gap:7px;
   line-height:1.4;min-width:0;overflow-wrap:anywhere;margin-top:6px}
-.status .d{color:var(--ink2);font-size:11.5px;margin-top:4px;word-break:break-all;
+.status .d{color:var(--ink2);font-size:13px;margin-top:5px;word-break:break-all;
   font-variant-numeric:tabular-nums}
 .dot{width:10px;height:10px;background:var(--ink);display:inline-block;flex:none}
 .dot.warn{background:var(--signal)}
@@ -92,7 +97,7 @@ button:focus-visible,a:focus-visible,summary:focus-visible{outline:2px solid var
 
 /* 按钮：切角 = 可点击；主要按钮悬停时强调色从左擦入 */
 .btn{position:relative;border:1px solid var(--ink);background:var(--panel);color:var(--ink);
-  padding:10px 16px;font-size:13.5px;font-weight:700;min-height:44px;border-radius:0;
+  padding:10px 18px;font-size:15px;font-weight:700;min-height:46px;border-radius:0;
   clip-path:polygon(0 0,100% 0,100% calc(100% - 9px),calc(100% - 9px) 100%,0 100%);
   transition:background-color .16s;white-space:nowrap}
 .btn:hover{background:var(--chip)}
@@ -105,100 +110,118 @@ button:focus-visible,a:focus-visible,summary:focus-visible{outline:2px solid var
   transition:background-size .28s cubic-bezier(.7,0,.2,1),color .2s}
 .btn.primary:hover,.btn.big.primary:hover,.btn.big.write:hover{
   background-size:100% 100%;color:var(--on-signal)}
-.btn.big{width:100%;min-height:58px;font-size:16px;font-weight:800;letter-spacing:.04em;
+.btn.big{width:100%;min-height:60px;font-size:17.5px;font-weight:800;letter-spacing:.04em;
   display:flex;align-items:center;justify-content:center;gap:10px}
 .btn.ghost{background:transparent;border-color:transparent;color:var(--ink);font-weight:600;
   text-decoration:underline;text-underline-offset:4px;clip-path:none}
 .btn.ghost:hover{background:transparent;color:var(--ink2)}
 .btn.danger{color:var(--danger);border-color:var(--danger)}
-.btn-row{display:flex;gap:9px;flex-wrap:wrap;align-items:center}
+.btn-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 
 /* 提示：白底细框 + 一面强调色小旗；告警也不用红色 */
 .hint{position:relative;background:var(--panel);border:1px solid var(--rule);
-  padding:11px 14px 11px 31px;font-size:12.5px;color:var(--ink);
+  padding:12px 16px 12px 34px;font-size:14px;line-height:1.7;color:var(--ink);
   margin-top:14px;overflow-wrap:anywhere}
-.hint::before{content:"";position:absolute;left:12px;top:14px;width:8px;height:12px;background:var(--signal)}
+.hint::before{content:"";position:absolute;left:13px;top:16px;width:8px;height:13px;background:var(--signal)}
 .hint.ok{border-left:4px solid var(--ink)}
 .hint.warn{border-color:var(--ink)}
 .hint a{color:inherit}
 
 details{border-top:1px solid var(--rule);margin-top:18px;padding-top:12px}
-summary{cursor:pointer;color:var(--ink);font-size:12px;font-weight:800;
-  letter-spacing:.1em;text-transform:uppercase;outline:none}
-.bookmark{display:inline-flex;align-items:center;gap:8px;min-height:44px;
-  background-color:var(--command);color:var(--command-ink);text-decoration:none;padding:11px 18px;
-  font-weight:800;font-size:13.5px;cursor:grab;
-  background-image:linear-gradient(var(--signal),var(--signal));
-  background-repeat:no-repeat;background-size:0% 100%;
-  transition:background-size .28s cubic-bezier(.7,0,.2,1),color .2s;
+summary{cursor:pointer;color:var(--ink);font-size:13.5px;font-weight:800;
+  letter-spacing:.08em;text-transform:uppercase;outline:none}
+.bookmark{display:inline-flex;align-items:center;gap:8px;min-height:48px;
+  background-color:var(--signal);color:var(--on-signal);border:2px solid var(--ink);
+  text-decoration:none;padding:11px 20px;font-weight:800;font-size:15.5px;cursor:grab;
+  transition:transform .12s ease,filter .16s ease;
   clip-path:polygon(0 0,100% 0,100% calc(100% - 9px),calc(100% - 9px) 100%,0 100%)}
-.bookmark:hover{background-size:100% 100%;color:var(--on-signal)}
+.bookmark:hover{filter:brightness(1.06);transform:translateY(-1px)}
 .bookmark:active{cursor:grabbing}
-.steps{counter-reset:s;margin:12px 0 0;padding-left:0;list-style:none}
-.steps li{position:relative;padding:8px 0 8px 34px;font-size:13.5px;color:var(--ink)}
+.steps{counter-reset:s;margin:14px 0 0;padding-left:0;list-style:none}
+.steps li{position:relative;background:var(--panel);border:1px solid var(--rule);border-left:4px solid var(--ink);
+  padding:16px 18px 16px 58px;margin-bottom:12px;font-size:15.5px;line-height:1.7;color:var(--ink)}
+.steps li:last-child{margin-bottom:0}
 .steps li:before{counter-increment:s;content:counter(s,decimal-leading-zero);
-  position:absolute;left:0;top:8px;width:24px;height:22px;background:var(--command);color:var(--command-ink);
-  font-size:11px;font-weight:800;display:grid;place-items:center}
+  position:absolute;left:14px;top:16px;width:32px;height:28px;background:var(--command);color:var(--command-ink);
+  font-size:13px;font-weight:800;display:grid;place-items:center}
+.step-title{display:block;font-size:16.5px;font-weight:800;margin-bottom:4px}
+.step-action{margin-top:12px;padding:12px 14px;background:var(--bg);border:1px solid var(--rule);
+  display:flex;flex-wrap:wrap;align-items:center;gap:12px}
+.step-arrow{font-size:13.5px;font-weight:700;color:var(--ink)}
 
 /* NO.00 首次引导：未完成时用强调色填充状态徽标 */
 .start-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-.start-state{margin-left:auto;font-size:11px;font-weight:800;letter-spacing:.08em;
+.start-state{margin-left:auto;font-size:12.5px;font-weight:800;letter-spacing:.08em;
   text-transform:uppercase;border:1px solid var(--ink);background:var(--panel);
-  padding:5px 10px;white-space:nowrap}
+  padding:6px 12px;white-space:nowrap}
 .start.needs-setup{border-top:3px solid var(--signal)}
 .start.needs-setup .start-state{background:var(--signal);color:var(--on-signal);border-color:var(--signal)}
 /* 已经有导出包时只留标题和入口，不再重复解释第一次用的原因 */
 .start:not(.needs-setup) > .lead{display:none}
-.steps .caution{display:block;color:var(--ink2);font-size:12px;margin-top:3px}
-.sub-tools{margin-top:12px;padding-top:10px}
-.sub-tools summary{font-size:11.5px}
-code{background:var(--chip);padding:1px 5px;font-size:12px}
+.steps .caution{display:block;color:var(--ink2);font-size:13.5px;margin-top:8px}
+.sub-tools{margin-top:14px;padding-top:12px}
+.sub-tools summary{font-size:13px}
+code{background:var(--chip);padding:2px 6px;font-size:13.5px}
 
 /* 分组记录行 */
-.groups{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 26px;margin-top:12px;width:100%}
-.group{display:grid;grid-template-columns:76px minmax(0,1fr);grid-template-rows:auto auto;
+.sub-head{margin:18px 0 4px;font-size:13px;font-weight:800;letter-spacing:.08em;color:var(--ink2);
+  display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+.groups{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 26px;margin-top:8px;width:100%}
+.group{display:grid;grid-template-columns:80px minmax(0,1fr);grid-template-rows:auto auto;
   gap:0 12px;align-items:center;border-bottom:1px solid var(--rule);
-  padding:12px 4px;min-width:0;overflow:hidden;background:transparent;
+  padding:13px 4px;min-width:0;overflow:hidden;background:transparent;cursor:pointer;
   transition:transform .18s cubic-bezier(.16,1,.3,1)}
 .group:hover{transform:translateX(5px);box-shadow:inset 3px 0 0 var(--trace)}
-.group .n{grid-row:1/3;font-size:29px;font-weight:850;letter-spacing:-.02em;
+.group .n{grid-row:1/3;font-size:32px;font-weight:850;letter-spacing:-.02em;
   font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
-.group .label{grid-column:2;grid-row:1;font-size:13.5px;font-weight:800;min-width:0;overflow-wrap:anywhere}
-.group .sample{grid-column:2;grid-row:2;font-size:11.5px;color:var(--ink2);
+.group .label{grid-column:2;grid-row:1;font-size:15px;font-weight:800;min-width:0;overflow-wrap:anywhere}
+.group .sample{grid-column:2;grid-row:2;font-size:13px;color:var(--ink2);
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .group .group-bar{grid-column:1 / -1;height:3px;background:var(--chip);margin-top:8px;overflow:hidden}
 .group .group-bar i{display:block;height:100%;background:var(--ink);transition:width .25s ease}
 .group.unknown .n{background:var(--signal);color:var(--on-signal);padding:0 7px;justify-self:start}
 .group.unknown .group-bar i{background:var(--signal)}
-.cross-bar{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.cross-bar{margin-top:18px}
 .cross-chip{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--rule);
-  background:var(--panel);padding:6px 11px;font-size:12px;color:var(--ink)}
+  background:var(--panel);padding:7px 12px;font-size:13.5px;color:var(--ink)}
 .cross-chip b{font-variant-numeric:tabular-nums;font-weight:800}
-.note-list{margin:0;padding-left:18px}
-.note-list li{margin:4px 0}
-.meta-line{font-size:12px;color:var(--ink2);margin-top:14px;overflow-wrap:anywhere;
+.write-groups{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(220px,100%),1fr));gap:8px;margin:12px 0 4px}
+.write-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--rule);
+  background:var(--bg);font-size:13.5px;cursor:pointer;min-width:0}
+.write-item input{width:16px;height:16px;flex:none;accent-color:var(--ink)}
+.write-item span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.write-item em{margin-left:auto;font-style:normal;font-size:12px;color:var(--ink2);
+  font-variant-numeric:tabular-nums;flex:none}
+.write-item.empty{opacity:.5;cursor:not-allowed}
+.modal-search{width:100%;padding:8px 11px;margin:0 0 10px;background:var(--bg);color:var(--ink);
+  border:1px solid var(--ink);font-size:14px;outline:none}
+.modal-search:focus{box-shadow:inset 3px 0 0 var(--signal)}
+.modal-list{max-height:280px}
+.note-list{margin:0;padding-left:20px}
+.note-list li{margin:5px 0}
+.meta-line{font-size:13.5px;color:var(--ink2);margin-top:14px;overflow-wrap:anywhere;
   font-variant-numeric:tabular-nums}
 
 .spin{width:15px;height:15px;border:2px solid var(--chip);border-top-color:var(--signal);
   animation:sp .8s steps(4) infinite;display:inline-block}
 @keyframes sp{to{transform:rotate(360deg)}}
 .report-frame{width:100%;height:620px;border:1px solid var(--ink);margin-top:14px;background:var(--frame-bg)}
-.log{font-size:12px;color:var(--ink2);max-height:150px;overflow:auto;background:var(--panel);
+.log{font-size:13px;color:var(--ink2);max-height:150px;overflow:auto;background:var(--panel);
   border:1px solid var(--rule);padding:10px 13px;margin-top:12px;font-family:ui-monospace,Consolas,monospace}
 .footer{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center;
-  color:var(--ink2);font-size:12px;padding-top:6px}
+  color:var(--ink2);font-size:13.5px;padding-top:6px}
 
 .overlay{position:fixed;inset:0;background:var(--scrim);display:none;place-items:center;z-index:50;padding:20px}
 .overlay.on{display:grid}
-.modal{background:var(--panel);border:1px solid var(--ink);max-width:540px;width:100%;
+.modal{background:var(--panel);border:1px solid var(--ink);max-width:560px;width:100%;
   padding:26px 28px;color:var(--ink)}
-.modal h3{margin:0 0 10px;font-size:20px;font-weight:800}
-.modal p{color:var(--ink2);font-size:14px;margin:0 0 14px}
+.modal h3{margin:0 0 12px;font-size:21px;font-weight:800}
+.modal p{color:var(--ink2);font-size:15px;line-height:1.65;margin:0 0 14px}
 .modal ul{background:var(--panel);border:1px solid var(--rule);padding:12px 14px 12px 32px;
-  font-size:13.5px;max-height:190px;overflow:auto;margin:0 0 14px;overflow-wrap:anywhere}
-.check{display:flex;gap:9px;align-items:flex-start;font-size:13.5px;margin:0 0 18px;
+  font-size:14px;max-height:190px;overflow:auto;margin:0 0 14px;overflow-wrap:anywhere}
+.check{display:flex;gap:9px;align-items:flex-start;font-size:14.5px;margin:0 0 18px;
   color:var(--ink);cursor:pointer}
-.check input{margin-top:4px;width:16px;height:16px;flex:none;accent-color:var(--ink)}
+.check input{margin-top:4px;width:17px;height:17px;flex:none;accent-color:var(--ink)}
 .drop{position:fixed;inset:0;z-index:60;display:none;place-items:center;
   background:repeating-linear-gradient(45deg,var(--hatch) 0 2px,transparent 2px 9px),var(--drop-bg);
   border:4px solid var(--ink);font-size:22px;font-weight:800;color:var(--ink)}
@@ -207,7 +230,7 @@ body.dragging .drop{display:grid}
 @media(max-width:760px){
   .status-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .groups{grid-template-columns:minmax(0,1fr)}
-  .command .right{display:none}
+  .command .right .ver{display:none}
   .wrap{padding:20px 18px 70px}
 }
 @media(max-width:520px){
@@ -215,9 +238,10 @@ body.dragging .drop{display:grid}
   .command{padding:8px 16px;gap:8px 12px}
   .group{grid-template-columns:62px minmax(0,1fr)}
   .start-head{display:block}
-  .start-head h2{font-size:19px}
+  .start-head h2{font-size:20px}
   .start-state{display:inline-block;margin-left:0;margin-top:8px}
-  .steps li{font-size:12.5px;overflow-wrap:anywhere}
+  .steps li{font-size:14.5px;padding:14px 14px 14px 50px;overflow-wrap:anywhere}
+  .steps li:before{left:12px;top:14px;width:28px;height:26px}
   .steps code,.hint code{overflow-wrap:anywhere}
 }
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
@@ -225,15 +249,23 @@ body.dragging .drop{display:grid}
 </head>
 <body>
 <div class="drop">松手即可读取导出包</div>
+<div class="topbar">
 <div class="command">
   <span class="brand">STEAM / COLLECTIONS</span>
   <span class="sep"></span>
-  <a class="cur" href="#analyse">统计</a>
-  <a href="#resultCard">结果</a>
-  <a href="#write">写入</a>
-  <span class="right"><span id="cmdMeta">等待统计</span><span>v__VERSION__</span><span>全程本机处理</span></span>
+  <a class="cur" href="#analyse" data-target="analyse">统计</a>
+  <a href="#resultCard" data-target="resultCard">结果</a>
+  <a href="#write" data-target="write">写入</a>
+  <span class="right">
+    <span class="ver">v__VERSION__</span>
+    <a class="gh-link" href="https://github.com/Sirli01/steam-source-collections" target="_blank" rel="noopener" title="在 GitHub 查看项目">
+      <svg viewBox="0 0 16 16" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path></svg>
+      <span>GitHub</span>
+    </a>
+  </span>
 </div>
 <div class="tri"><i></i><i></i><i></i></div>
+</div>
 
 <div class="wrap">
 
@@ -252,26 +284,39 @@ body.dragging .drop{display:grid}
 
     <div id="dataBox">
       <ol class="steps">
-        <li><b>把下面这个按钮拖到浏览器书签栏</b>（只需做一次；看不到书签栏按 <code>Ctrl+Shift+B</code>）。
-          <span class="caution">别在这个工具页上点它 —— 在这里点不会有反应，它只在第 2 步打开的许可页上有用。</span></li>
-        <li><b>点「打开 Steam 许可页」</b>，确认已登录、页面加载完，然后<b>在许可页上点一下刚拖进去的书签</b>。右上角进度条会自动翻完所有分页、补全游戏名称（游戏多时 30～90 秒，走完前别关页面），完成后浏览器会<b>自动下载</b> <code>steam-licenses-*.json</code>。</li>
-        <li><b>回到这个窗口，直接点「一键统计 →」</b>。工具会自己在下载文件夹里找到刚下的文件，<b>不用你去翻目录</b>；万一没找到，把文件拖进窗口，或点下面「找不到文件？」里的「选择导出文件」。</li>
+        <li>
+          <span class="step-title">把下方高亮的「导出 Steam 数据」按钮，按住拖到浏览器书签栏</span>
+          只需做一次；如果看不到浏览器顶部的书签栏，按快捷键 <code>Ctrl+Shift+B</code> 显示它。
+          <div class="step-action">
+            <a class="bookmark" id="bmLink" href="#">✥ 导出 Steam 数据</a>
+            <span class="step-arrow">← 按住左键不放，直接拖到浏览器顶部的书签栏</span>
+          </div>
+          <span class="caution">注意：<b>别在这个工具页上点它</b> —— 这里只是装书签的地方，左键直接点它不会导出任何东西。</span>
+        </li>
+        <li>
+          <span class="step-title">打开 Steam 许可页，并在「那个页面」点一下刚拖上去的书签</span>
+          先点下面这个按钮打开页面，确认账号已登录、能看到你的许可记录表，然后点击浏览器书签栏里的「导出 Steam 数据」。右上角进度条会自动翻完所有分页并补全名称（游戏多时约 30～90 秒，走完前别关页面），完成后会自动下载 <code>steam-licenses-*.json</code>。
+          <div class="step-action">
+            <button class="btn primary" id="btnLicense">打开 Steam 许可页 ↗</button>
+            <span class="step-arrow">点这里跳转过去后，再点顶部书签栏里的「导出 Steam 数据」</span>
+          </div>
+        </li>
+        <li>
+          <span class="step-title">回到这个窗口，直接点「一键统计 →」</span>
+          看到浏览器下载完 <code>steam-licenses-*.json</code> 后切回本页，点下面 NO.01 的大按钮即可——工具会自动去下载文件夹找到刚下的文件，<b>不用你去翻目录</b>；如果没找到，也可以把文件直接拖进这个窗口，或点下方「选择导出文件」。
+        </li>
       </ol>
-      <div class="btn-row" style="margin:14px 0 8px">
-        <a class="bookmark" id="bmLink" href="#" onclick="return false">导出 Steam 数据</a>
-        <button class="btn" id="btnLicense">打开 Steam 许可页</button>
-        <input type="file" id="fileInput" accept=".json,application/json" hidden>
-      </div>
-      <div class="hint">下载的文件叫 <b>steam-licenses-*.json</b>，浏览器一般放在「下载」文件夹。拖过或选过一次就会被记住，下次启动不用再找。之后想换数据或补上 ⑤ 家庭共享，再按这三步重做一次即可。</div>
+      <input type="file" id="fileInput" accept=".json,application/json" hidden>
+      <div class="hint">下载的文件叫 <b>steam-licenses-*.json</b>，浏览器一般放在「下载」文件夹。拖过或选过一次就会被记住，下次启动不用再导出；之后想更新数据或补上 ⑤ 家庭共享，再重做一遍第 02、03 步即可。</div>
       <div class="hint warn" id="startHint" style="display:none"></div>
-      <details class="sub-tools"><summary>找不到文件？其他方式</summary>
+      <details class="sub-tools"><summary>找不到文件或拖不动书签？其他方式</summary>
         <div class="btn-row" style="margin:12px 0 6px">
           <button class="btn" id="btnPickFile">选择导出文件</button>
           <button class="btn" id="btnDownloads">打开下载文件夹</button>
           <button class="btn" id="btnCopyBm">复制书签代码</button>
           <button class="btn" id="btnBookmarkFile">下载脚本（给油猴插件用）</button>
         </div>
-        <div class="hint">拖不动书签就点「复制书签代码」→ 右键书签栏 →「添加网页」，把代码粘到网址栏。也可以把下载好的 JSON 直接拖进这个窗口，松手就自动统计。</div>
+        <div class="hint">拖不动书签就点「复制书签代码」→ 右键浏览器书签栏空白处 →「添加网页 / 添加书签」，把代码粘到网址（URL）栏即可。也可以把下载好的 JSON 直接拖进这个窗口，松手就自动统计。</div>
       </details>
     </div>
   </div>
@@ -292,12 +337,11 @@ body.dragging .drop{display:grid}
       <button class="btn ghost" id="btnRescan">重新检测文件</button>
       <button class="btn ghost" id="btnLastReport" style="display:none">打开上次的报告</button>
     </div>
-    <details class="sub-tools"><summary>统计与写入选项（可选）</summary>
-      <div style="margin-top:10px;display:grid;gap:8px">
-        <label class="check" style="margin:0;font-size:12.5px"><input type="checkbox" id="optInferOrder" checked><span>启用本机缓存顺序对齐（推荐）</span></label>
-        <label class="check" style="margin:0;font-size:12.5px"><input type="checkbox" id="optConflictLatest"><span>同一游戏多条许可时按最新日期优先（默认付费优先）</span></label>
-        <label class="check" style="margin:0;font-size:12.5px"><input type="checkbox" id="optWriteCross"><span>写入 Steam 时同时创建交叉分组（吃灰区 / 真的玩过 / 付费未启动）</span></label>
-        <label class="check" style="margin:0;font-size:12.5px"><input type="checkbox" id="optOnlineNames"><span>联网补全剩余缺名游戏（可选，默认关闭）</span></label>
+    <details class="sub-tools"><summary>统计选项（可选）</summary>
+      <div style="margin-top:10px;display:grid;gap:9px">
+        <label class="check" style="margin:0;font-size:14px"><input type="checkbox" id="optInferOrder" checked><span>启用本机缓存顺序对齐（推荐）</span></label>
+        <label class="check" style="margin:0;font-size:14px"><input type="checkbox" id="optConflictLatest"><span>同一游戏多条许可时按最新日期优先（默认付费优先）</span></label>
+        <label class="check" style="margin:0;font-size:14px"><input type="checkbox" id="optOnlineNames"><span>联网补全剩余缺名游戏（可选，默认关闭）</span></label>
       </div>
     </details>
     <div id="frameBox" style="display:none">
@@ -309,6 +353,7 @@ body.dragging .drop{display:grid}
     <div class="eyebrow">// RESULTS</div>
     <h2><span class="num">02</span> 统计结果</h2>
     <div id="resultSummary" class="lead"></div>
+    <div class="sub-head"><span>来源分组</span><span style="font-weight:500;letter-spacing:0">点击任意分组查看完整名单</span></div>
     <div class="groups" id="groups"></div>
     <div class="cross-bar" id="crossBar"></div>
     <div class="meta-line" id="resultMeta"></div>
@@ -323,9 +368,14 @@ body.dragging .drop{display:grid}
   <div class="card" id="write">
     <div class="eyebrow">// WRITE TO STEAM</div>
     <h2><span class="num">03</span> 一键写入 Steam 收藏集</h2>
-    <p class="lead">把上面 ①～⑥ 分组直接建成 Steam 里的收藏集。<b>只新增</b>带「[来源]」前缀的收藏集，现有分组一个都不动。Steam 开着时，工具会让 <b>Steam 客户端自己写入并上传到账号</b>，Steam Deck 自动同步，<b>不用退出、不用重启</b>；只有 Steam 没开本机接口时，才需要退出 Steam 改本机文件。</p>
+    <p class="lead">勾选下面想同步到 Steam 的分组（写入后会带「✥ 」符号前缀以区分你手动建的分组，旧版带「[来源]」或「①～⑨」前缀的分组会自动就地改名，未勾选的旧本工具分组会被清理），你的收藏夹和其它自定义分组一个都不动。Steam 开着时由 <b>Steam 客户端自己写入并同步云端</b>，<b>不用退出、不用重启</b>。</p>
+    <div style="background:var(--panel);border:1px solid var(--rule);border-left:4px solid var(--ink);padding:12px 14px;margin:0 0 14px">
+      <label class="check" style="margin:0;font-size:15px;font-weight:700"><input type="checkbox" id="optWriteCross"><span>一并勾选游玩状态分组（试验：真正玩过 / 挂卡刷时长（试验） / 从未启动）</span></label>
+      <div style="color:var(--ink2);font-size:13px;margin:4px 0 0 26px">试验功能：结合掉卡时长区间（1～7.7 小时）、集换式卡牌特性、零成就/零本地存档、相同游玩时长聚类与同日批量记录估算。仅运行几分钟（&lt;1 小时）、游玩超 7.7 小时、或卖卡后继续玩出成就/存档的游戏都会归入「真正玩过」。</div>
+      <div class="write-groups" id="writeGroupList"></div>
+    </div>
     <button class="btn big write" id="btnApply" disabled>一键写入 Steam →</button>
-    <div class="hint warn" id="applyHint">先点上面的「一键统计」，这里才能用。</div>
+    <div class="hint warn" id="applyHint">先点上面的「一键统计」，这里才能勾选和写入。</div>
     <div class="btn-row" style="margin-top:12px">
       <button class="btn danger" id="btnRestore">一键还原（撤销上次写入）</button>
     </div>
@@ -377,6 +427,7 @@ function modal(opt){
   $("mTitle").textContent=opt.title;$("mBody").innerHTML=opt.html;
   $("mCheckRow").style.display=opt.check?"flex":"none";
   $("mCheckText").textContent=opt.check||"";$("mCheck").checked=false;
+  $("mCancel").textContent=opt.cancelText||"取消";
   $("mOk").textContent=opt.okText||"确认";
   $("mOk").className="btn "+(opt.danger?"danger":"primary");
   $("overlay").classList.add("on");
@@ -397,7 +448,6 @@ function renderState(s){
   $("steamSub").textContent=st.found?`${st.cache_packages} 个礼包包映射 · ${st.playtimes} 条游玩时长`:"请确认 Steam 客户端已安装";
   $("cloudVal").innerHTML=s.cloud.found?'<span class="dot"></span>收藏集文件可写':'<span class="dot warn"></span>未找到收藏集文件';
   $("cloudSub").textContent=s.cloud.found?`现有 ${st.collections} 个收藏集`:"新版客户端可能用了别的存储位置";
-  $("cmdMeta").textContent=b?`${b.license_rows} 行许可 / ${b.owned_apps} 款游戏`:"等待导出包";
 
   // 导出包状态变了才重新决定引导卡展开与否；用户手动收起后就不再自动改动
   const key=b?`${b.name}|${b.modified}`:"none";
@@ -413,23 +463,56 @@ function renderState(s){
   $("btnData").textContent=$("dataBox").style.display==="none"?"查看导出步骤 / 重新导出 →":"收起导出步骤";
   $("btnLastReport").style.display=s.has_report?"inline-flex":"none";
 }
+function groupCardHtml(x,idx,total){
+  const pct=x.count?Math.max(2,Math.round(100*x.count/total)):0;
+  return `<div class="group ${x.id==="unknown"?"unknown":""}" data-gidx="${idx}" tabindex="0" role="button" title="点击查看「${esc(x.name)}」全部游戏">
+    <div class="n">${x.count}</div><div class="label">${esc(x.name)}</div>
+    <div class="sample">${esc(x.sample&&x.sample.length?x.sample.join("、"):"—")}</div>
+    <div class="group-bar"><i style="width:${pct}%"></i></div></div>`;
+}
+function showGroupModal(groupIndex){
+  const grp=lastGroups[groupIndex];
+  if(!grp)return;
+  const names=(grp.games&&grp.games.length)?grp.games:(grp.sample||[]);
+  const items=names.length?names.map(n=>`<li>${esc(n)}</li>`).join(""):"<li>（本组为空）</li>";
+  modal({
+    title:`${grp.name}（${grp.count} 款）`,
+    html:`<input class="modal-search" type="search" placeholder="筛选本组游戏名…">`+
+      `<div style="font-size:12.5px;color:var(--ink2);margin:0 0 8px">共 ${names.length} 款</div>`+
+      `<ul class="modal-list">${items}</ul>`,
+    cancelText:"关闭",
+    okText:"复制本组游戏名",
+    onConfirm:async()=>{
+      try{await navigator.clipboard.writeText(names.join("\n"));note(`已复制 ${grp.name}（${names.length} 款）`,"ok");}
+      catch(e){note("复制失败，可在「查看完整报告」里复制。","warn");}
+    },
+    check:null
+  });
+  const search=$("mBody").querySelector(".modal-search");
+  const list=$("mBody").querySelector(".modal-list");
+  if(search&&list){
+    search.oninput=()=>{
+      const q=search.value.trim().toLowerCase();
+      list.querySelectorAll("li").forEach(li=>{
+        li.style.display=(!q||li.textContent.toLowerCase().includes(q))?"":"none";
+      });
+    };
+  }
+}
 function renderResult(d){
   latest=d;lastGroups=d.groups||[];
   const g=lastGroups,src=g.filter(x=>x.kind==="source"),cross=g.filter(x=>x.kind!=="source");
   const totalSrc=src.reduce((s,x)=>s+(x.count||0),0)||1;
+  const totalOwned=(d.meta&&d.meta.owned_apps)||cross.reduce((s,x)=>s+(x.count||0),0)||1;
   $("resultCard").style.display="block";
   $("resultSummary").innerHTML=`已解析 <b>${d.meta.license_rows}</b> 行许可、<b>${d.meta.owned_apps}</b> 款自己的游戏`+
     (d.meta.family_apps?`、<b>${d.meta.family_apps}</b> 款家庭共享游戏`:"")+`，结果如下。`;
-  $("groups").innerHTML=src.map(x=>{
-    const pct=x.count?Math.max(2,Math.round(100*x.count/totalSrc)):0;
-    return `<div class="group ${x.id==="unknown"?"unknown":""}">
-      <div class="n">${x.count}</div><div class="label">${esc(x.name)}</div>
-      <div class="sample">${esc(x.sample.length?x.sample.join("、"):"—")}</div>
-      <div class="group-bar"><i style="width:${pct}%"></i></div></div>`;
-  }).join("");
+  $("groups").innerHTML=src.map(x=>groupCardHtml(x,g.indexOf(x),totalSrc)).join("");
   $("crossBar").innerHTML=cross.length
-    ? cross.map(x=>`<span class="cross-chip">${esc(x.name)} <b>${x.count}</b></span>`).join("")
-    : `<span class="cross-chip">未生成交叉分组（缺少游玩时长）</span>`;
+    ? `<div class="sub-head"><span>游玩状态分组（个人库 ${totalOwned} 款）</span><span style="font-weight:500;letter-spacing:0">点击查看具体游戏</span></div>`+
+      `<div class="groups">${cross.map(x=>groupCardHtml(x,g.indexOf(x),totalOwned)).join("")}</div>`
+    : `<span class="cross-chip">未生成游玩状态分组（缺少游玩时长）</span>`;
+  renderWriteGroups();
   const recNames=d.meta.cache_recovered_names?` · appinfo 补全 ${d.meta.cache_recovered_names} 个名称`:"";
   const netNames=d.meta.online_recovered_names?` · 联网补全 ${d.meta.online_recovered_names} 个名称`:"";
   $("resultMeta").textContent=`精确对齐 ${d.meta.explicit_appid_rows} 行 · 本机缓存 ${d.meta.local_cache_packages} 个礼包包${recNames}${netNames}`;
@@ -442,6 +525,7 @@ function renderResult(d){
   if(!pre.writable)note("写入不可用："+(pre.reason||"收藏集文件结构未识别"),"warn");
   else note("统计完成，可以点「一键写入 Steam」；Steam 开着时会自动同步到账号。","ok");
   $("resultCard").scrollIntoView({behavior:"smooth",block:"nearest"});
+  setActiveNav("resultCard");
 }
 function esc(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
 
@@ -473,11 +557,37 @@ async function analyse(){
     okText:"知道了",onConfirm:async()=>{},check:null});}
   finally{busy("btnAnalyse",false);}
 }
+function renderWriteGroups(){
+  const box=$("writeGroupList");
+  if(!box)return;
+  const includeCross=$("optWriteCross").checked;
+  box.innerHTML=lastGroups.map(x=>{
+    const empty=!x.count;
+    const checked=!empty&&(x.kind==="source"||includeCross);
+    return `<label class="write-item ${empty?"empty":""}">`+
+      `<input type="checkbox" data-gid="${esc(x.id)}" data-kind="${esc(x.kind)}" ${checked?"checked":""} ${empty?"disabled":""}>`+
+      `<span>✥ ${esc(x.name)}</span><em>${x.count}</em></label>`;
+  }).join("");
+}
+function getSelectedGroups(){
+  const box=$("writeGroupList");
+  if(!box)return null;
+  const inputs=[...box.querySelectorAll("input[data-gid]")];
+  if(!inputs.length)return null;
+  return inputs.filter(el=>el.checked&&!el.disabled).map(el=>el.dataset.gid);
+}
 async function applyModal(recheck){
   if(!latest)return;
   const includeCross=$("optWriteCross").checked;
+  const selected=getSelectedGroups();
+  if(selected&&!selected.length){
+    note("请至少勾选一个要写入 Steam 的分组。","warn");
+    return;
+  }
+  const reqBody={include_cross:includeCross};
+  if(selected)reqBody.selected_groups=selected;
   let pre;
-  try{const d=await api("/api/preflight",{include_cross:includeCross});pre=d.preflight;latest.preflight=pre;
+  try{const d=await api("/api/preflight",reqBody);pre=d.preflight;latest.preflight=pre;
     if(d.running && pre.via!=="client"){
       modal({title:"请先退出 Steam",
         html:`<p>${recheck?"检测到 Steam 仍在运行——你还没有关闭它。":"当前 Steam 没有开启本机接口，只能写入本机文件；这时需要先退出 Steam。"}</p>
@@ -491,20 +601,20 @@ async function applyModal(recheck){
   if(!pre.writable){note("写入不可用："+(pre.reason||"收藏集文件结构未识别"),"warn");return;}
   const list=(pre.collections_to_write||[]).map(x=>`<li>${esc(x)}</li>`).join("");
   const syncHint=pre.via==="client"
-    ? `<div class="hint">检测到 Steam 正在运行：直接由 Steam 客户端写入并自动同步到账号和 Steam Deck，<b>不用退出、不用重启</b>。你在客户端里手动做过的调整会保留。</div>`
-    : `<div class="hint warn">当前只能写入本机文件：请先退出 Steam，写入后重新启动 Steam 等 1～2 分钟上传；Steam Deck 也要重启客户端。写前自动双备份，随时可一键还原。</div>`;
+    ? `<div class="hint">检测到 Steam 正在运行：直接由 Steam 客户端写入并自动同步到云端，<b>不用退出、不用重启</b>。你在客户端里手动做过的调整会保留。</div>`
+    : `<div class="hint warn">当前只能写入本机文件：请先退出 Steam，写入后重新启动 Steam 等 1～2 分钟上传到云端。写前自动双备份，随时可一键还原。</div>`;
   modal({title:"确认写入 Steam？",
-    html:`<p>将写入下面 ${(pre.collections_to_write||[]).length} 个收藏集，只新增、不改动任何现有分组：</p>
+    html:`<p>将写入下面 ${(pre.collections_to_write||[]).length} 个「✥ 」前缀分组，未勾选的旧本工具分组会自动清理，其它自定义分组一个不动：</p>
       <ul>${list}</ul>
       ${syncHint}`,
     check:"我确认写入 Steam 收藏集",
     okText:"确认写入",
     onConfirm:async()=>{busy("btnApply",true,"正在写入…");
-      try{const d=await api("/api/apply",{confirm:true,include_cross:includeCross});
+      try{const d=await api("/api/apply",Object.assign({confirm:true},reqBody));
         const bak=(d.backups&&d.backups[0])?("；备份："+d.backups[0]):"";
         note("✅ 已写入 "+d.collections.length+" 个收藏集"+bak,"ok");
         modal({title:"写入完成",html:`<p>已${d.via==="client"?"通过 Steam 客户端保存":"写入 Steam 收藏集文件"} ${d.collections.length} 个分组。</p>
-          <div class="hint">${d.via==="client"?"Steam 正在自动同步到账号，Steam Deck 稍等即可看到，不需要退出或重启 Steam；如果 Deck 上没立刻刷新，切换一下库页面。想撤销的话，直接在主界面点「一键还原」。":"现在重新启动 Steam，等 1～2 分钟让新分组上传到账号；Steam Deck 上完全退出 Steam 再打开。若 Steam 提示云同步冲突，选择保留本机版本。想撤销的话，退出 Steam 后点主界面的「一键还原」。"}</div>`,
+          <div class="hint">${d.via==="client"?"Steam 客户端已保存并正在自动同步到云端，不需要退出或重启 Steam。想撤销的话，直接在主界面点「一键还原」。":"现在重新启动 Steam，等 1～2 分钟让新分组同步到云端。若 Steam 提示云同步冲突，选择保留本机版本。想撤销的话，退出 Steam 后点主界面的「一键还原」。"}</div>`,
           okText:"好",onConfirm:async()=>{}});
         renderState(d.state);
       }catch(e){note("✗ "+e.message,"warn");
@@ -514,11 +624,64 @@ async function applyModal(recheck){
 }
 
 $("btnAnalyse").onclick=analyse;
+$("optWriteCross").onchange=()=>{
+  const box=$("writeGroupList");
+  if(!box)return;
+  const on=$("optWriteCross").checked;
+  box.querySelectorAll('input[data-kind="cross"]:not(:disabled)').forEach(el=>{el.checked=on;});
+};
+$("groups").onclick=e=>{const el=e.target.closest(".group[data-gidx]");if(el)showGroupModal(Number(el.dataset.gidx));};
+$("crossBar").onclick=e=>{const el=e.target.closest(".group[data-gidx]");if(el)showGroupModal(Number(el.dataset.gidx));};
+["groups","crossBar"].forEach(id=>$(id).addEventListener("keydown",e=>{
+  if(e.key==="Enter"||e.key===" "){const el=e.target.closest(".group[data-gidx]");if(el){e.preventDefault();showGroupModal(Number(el.dataset.gidx));}}
+}));
+const navLinks=[...document.querySelectorAll(".command a[data-target]")];
+function setActiveNav(id){navLinks.forEach(a=>a.classList.toggle("cur",a.dataset.target===id));}
+navLinks.forEach(a=>a.addEventListener("click",e=>{
+  e.preventDefault();
+  const id=a.dataset.target,el=document.getElementById(id);
+  if(!el)return;
+  if(el.style.display==="none"){
+    $("analyse").scrollIntoView({behavior:"smooth",block:"start"});
+    setActiveNav("analyse");
+    note("请先点「一键统计 →」生成统计结果。","warn");
+    return;
+  }
+  el.scrollIntoView({behavior:"smooth",block:"start"});
+  setActiveNav(id);
+}));
+function syncNavOnScroll(){
+  const visible=navLinks.map(a=>document.getElementById(a.dataset.target)).filter(el=>el&&el.style.display!=="none");
+  if(!visible.length)return;
+  if(window.innerHeight+window.scrollY>=document.documentElement.scrollHeight-40){
+    setActiveNav(visible[visible.length-1].id);return;
+  }
+  const y=window.scrollY+110;
+  let cur=visible[0].id;
+  for(const el of visible)if(el.getBoundingClientRect().top+window.scrollY<=y)cur=el.id;
+  setActiveNav(cur);
+}
+window.addEventListener("scroll",syncNavOnScroll,{passive:true});
 $("btnRescan").onclick=async()=>{await loadState(true);note("已重新检测本机文件");};
 $("btnData").onclick=()=>{guideAuto=false;const b=$("dataBox");
   b.style.display=b.style.display==="none"?"block":"none";
   $("btnData").textContent=b.style.display==="none"?"查看导出步骤 / 重新导出 →":"收起导出步骤";
   if(b.style.display==="block")$("startBox").scrollIntoView({behavior:"smooth",block:"start"});};
+$("bmLink").onclick=e=>{
+  e.preventDefault();
+  modal({
+    title:"这个按钮需要「按住拖到书签栏」",
+    html:`<p>直接在这个工具页点击它不会运行。请<b>按住左键不放</b>，把青色的「✥ 导出 Steam 数据」按钮拖到浏览器顶部的书签栏（没显示书签栏请按 <code>Ctrl+Shift+B</code>）。</p>
+      <div class="hint">放进书签栏后，再点第 02 步的「打开 Steam 许可页 ↗」，在 Steam 页面里点那个书签即可开始导出。</div>`,
+    okText:"拖不动？点此复制书签代码",
+    onConfirm:async()=>{
+      try{await navigator.clipboard.writeText(bookmarkCode);
+        note("书签代码已复制，请在浏览器书签栏右键 → 添加网页，把代码粘到网址栏。","ok");}
+      catch(err){note("复制失败，请按住按钮拖到书签栏，或点下方「下载脚本」。","warn");}
+    },
+    check:null
+  });
+};
 $("btnCopyBm").onclick=async()=>{try{await navigator.clipboard.writeText(bookmarkCode);
   note("书签代码已复制，可在浏览器里新建一个书签、把代码粘到网址栏。","ok");}
   catch(e){note("复制失败，请直接把按钮拖到书签栏。","warn");}};

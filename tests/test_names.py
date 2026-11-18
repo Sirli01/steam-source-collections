@@ -117,6 +117,12 @@ class PackageNameTests(unittest.TestCase):
         self.assertEqual(result.games, [])
         self.assertEqual(result.via, "none")
 
+    def test_vr_license_does_not_fuzzy_match_non_vr_base_game(self):
+        index = build_index([Game(851890, "Gal*Gun 2")])
+        result = match_package("Gal*Gun 2 - VR DLC", index)
+        self.assertEqual(result.games, [])
+        self.assertEqual(result.via, "none")
+
 
 class AppInfoTests(unittest.TestCase):
     def test_resolves_localized_names_to_owned_appids(self):

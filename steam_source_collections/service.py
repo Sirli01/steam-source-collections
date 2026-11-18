@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import secrets
 import shutil
 import string
@@ -31,6 +32,7 @@ from .writeback import (
     hidden_console_kwargs,
     preview as writeback_preview,
     steam_is_running,
+    target_groups as writeback_target_groups,
 )
 
 LICENSE_PAGE = "https://store.steampowered.com/account/licenses/"
@@ -58,14 +60,15 @@ class Analysis:
         by_id = {game.appid: game.name for game in self._games}
         result = []
         for group in self.plan.groups:
-            names = [by_id.get(int(a), f"App {a}") for a in group["appids"][:4]
-                     if str(a).isdigit()]
+            all_names = [by_id.get(int(a), f"App {a}") for a in group["appids"]
+                         if str(a).isdigit()]
             result.append({
                 "id": group["id"],
                 "name": group["name"],
                 "kind": group.get("kind", "source"),
                 "count": len(group["appids"]),
-                "sample": names,
+                "sample": all_names[:4],
+                "games": all_names,
             })
         return result
 
@@ -253,11 +256,40 @@ def steam_status() -> bool | None:
 
 
 BASELINE_NAME = "client_baseline.json"
+_LEGACY_NUM_TO_ID = {
+    "①": "store",
+    "②": "retail",
+    "③": "free",
+    "④": "gift",
+    "⑤": "family",
+    "⑥": "unknown",
+    "⑧": "idled",
+    "⑨": "unplayed",
+}
 
 
-def merge_plan_with_client(plan: Plan, existing: list[dict],
-                           baseline: dict | None = None,
-                           include_cross: bool = False) -> list[dict]:
+def _legacy_target_id(raw_name: str) -> str | None:
+    text = str(raw_name or "")
+    for head in (cefbridge.PREFIX, cefbridge.LEGACY_PREFIX):
+        if text.startswith(head):
+            text = text[len(head):]
+    if not text:
+        return None
+    lead = text[0]
+    if lead == "③" and len(text) > 1 and text[1] in ("b", "c"):
+        return None
+    if lead == "⑦":
+        return "played" if "真正玩过" in text else None
+    return _LEGACY_NUM_TO_ID.get(lead)
+
+
+def merge_plan_with_client(
+    plan: Plan,
+    existing: list[dict],
+    baseline: dict | None = None,
+    include_cross: bool = False,
+    selected_groups: list[str] | set[str] | None = None,
+) -> list[dict]:
     """Build client-side writes without undoing the user's manual edits.
 
     ``baseline`` maps a group name to the appids written last time. If it is
@@ -266,23 +298,46 @@ def merge_plan_with_client(plan: Plan, existing: list[dict],
     kept; games they removed stay removed.
     """
     prefix = cefbridge.PREFIX
-    by_name = {
-        str(item["name"])[len(prefix):]: item
-        for item in existing
-        if str(item.get("name", "")).startswith(prefix)
-    }
+    by_name: dict[str, dict] = {}
+    by_id_hint: dict[str, dict] = {}
+    for item in existing:
+        raw_name = str(item.get("name", ""))
+        if not cefbridge.is_managed_name(raw_name):
+            continue
+        short = cefbridge.strip_managed_prefix(raw_name)
+        by_name[short] = item
+        if raw_name.startswith(prefix):
+            by_name.setdefault(raw_name[len(prefix):], item)
+        elif raw_name.startswith(cefbridge.LEGACY_PREFIX):
+            by_name.setdefault(raw_name[len(cefbridge.LEGACY_PREFIX):], item)
+        gid = _legacy_target_id(raw_name)
+        if gid:
+            by_id_hint.setdefault(gid, item)
+
     baseline = baseline or {}
-    allowed = ("source", "cross") if include_cross else ("source",)
+    groups = writeback_target_groups(plan, include_cross=include_cross, selected_groups=selected_groups)
     items: list[dict] = []
     alphabet = string.ascii_letters + string.digits
-    for group in plan.groups:
-        if group.get("kind") not in allowed or not group.get("appids"):
-            continue
+    for group in groups:
         name = group["name"]
         want = {int(a) for a in group["appids"] if str(a).isdigit()}
-        old = by_name.get(name)
+        old = by_name.get(name) or by_id_hint.get(str(group.get("id", "")))
         if old:
-            base = {int(a) for a in baseline.get(name, group["appids"])}
+            raw_old = str(old.get("name", ""))
+            clean_old = cefbridge.strip_managed_prefix(raw_old)
+            raw_no_legacy = (
+                raw_old[len(cefbridge.LEGACY_PREFIX):]
+                if raw_old.startswith(cefbridge.LEGACY_PREFIX)
+                else raw_old
+            )
+            base_ids = None
+            for key in (name, prefix + name, clean_old, raw_old, raw_no_legacy):
+                if key in baseline:
+                    base_ids = baseline[key]
+                    break
+            if base_ids is None:
+                base_ids = group["appids"]
+            base = {int(a) for a in base_ids}
             current = {int(a) for a in old.get("added") or []}
             user_added = current - base
             user_removed = base - current
@@ -298,8 +353,12 @@ def merge_plan_with_client(plan: Plan, existing: list[dict],
     return items
 
 
-def client_write_plan(analysis: Analysis, outdir: str | Path,
-                      include_cross: bool | None = None) -> dict:
+def client_write_plan(
+    analysis: Analysis,
+    outdir: str | Path,
+    include_cross: bool | None = None,
+    selected_groups: list[str] | set[str] | None = None,
+) -> dict:
     """Write through the *running* Steam client, which uploads to Steam Cloud."""
     cross = getattr(analysis, "include_cross", False) if include_cross is None else include_cross
     try:
@@ -322,7 +381,10 @@ def client_write_plan(analysis: Analysis, outdir: str | Path,
         baseline = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
     except (OSError, ValueError):
         baseline = {}
-    items = merge_plan_with_client(analysis.plan, existing, baseline, include_cross=cross)
+    items = merge_plan_with_client(
+        analysis.plan, existing, baseline,
+        include_cross=cross, selected_groups=selected_groups,
+    )
     try:
         result = cefbridge.save_many(items)
     except (cefbridge.CEFError, OSError) as exc:
@@ -331,9 +393,23 @@ def client_write_plan(analysis: Analysis, outdir: str | Path,
     if failed:
         raise ServiceError("Steam 客户端未能保存：" + "；".join(
             f"{row.get('name', '')}：{row.get('error', '未知错误')}" for row in failed))
+    kept_ids = {str(item["id"]) for item in items if item.get("id")}
+    stale_ids = [
+        str(item["id"]) for item in existing
+        if item.get("id") and str(item["id"]) not in kept_ids
+    ]
+    if stale_ids:
+        try:
+            del_res = cefbridge.delete_many(stale_ids)
+        except (cefbridge.CEFError, OSError) as exc:
+            raise ServiceError(f"清理旧分组失败：{exc}") from exc
+        failed_del = [row for row in del_res if not row.get("ok")]
+        if failed_del:
+            raise ServiceError("Steam 客户端未能删除旧分组：" + "；".join(
+                f"{row.get('id', '')}：{row.get('error', '未知错误')}" for row in failed_del))
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(
-        {item["name"][len(cefbridge.PREFIX):]: item["added"] for item in items},
+        {cefbridge.strip_managed_prefix(item["name"]): item["added"] for item in items},
         ensure_ascii=False, indent=2), encoding="utf-8")
     return {
         "ok": True,
@@ -344,13 +420,16 @@ def client_write_plan(analysis: Analysis, outdir: str | Path,
     }
 
 
-def preflight(analysis: Analysis, include_cross: bool | None = None) -> dict:
+def preflight(
+    analysis: Analysis,
+    include_cross: bool | None = None,
+    selected_groups: list[str] | set[str] | None = None,
+) -> dict:
     """Read-only capability check; never probes Steam's process."""
     cross = getattr(analysis, "include_cross", False) if include_cross is None else include_cross
-    allowed = ("source", "cross") if cross else ("source",)
     groups = [
-        cefbridge.PREFIX + group["name"] for group in analysis.plan.groups
-        if group.get("kind") in allowed and group.get("appids")
+        cefbridge.PREFIX + group["name"]
+        for group in writeback_target_groups(analysis.plan, cross, selected_groups)
     ]
     cloud = analysis.local.cloud_path
     if cefbridge.debugger_available():
@@ -364,7 +443,7 @@ def preflight(analysis: Analysis, include_cross: bool | None = None) -> dict:
             "cef_available": True,
             "requires_steam_closed": False,
             "collections_to_write": groups,
-            "strategy": "通过正在运行的 Steam 客户端写入，Steam 自动同步到账号与 Steam Deck",
+            "strategy": "通过正在运行的 Steam 客户端写入，并自动同步到 Steam 云端",
             "cloud_path": str(cloud) if cloud else "",
         }
     if not cloud or not Path(cloud).is_file():
@@ -372,7 +451,10 @@ def preflight(analysis: Analysis, include_cross: bool | None = None) -> dict:
                 "via": "file", "cef_available": False,
                 "collections_to_write": groups}
     try:
-        info = writeback_preview(Path(cloud), analysis.plan, include_cross=cross)
+        info = writeback_preview(
+            Path(cloud), analysis.plan,
+            include_cross=cross, selected_groups=selected_groups,
+        )
     except (WritebackError, OSError, json.JSONDecodeError) as exc:
         return {"writable": False, "reason": str(exc), "via": "file",
                 "cef_available": False, "collections_to_write": groups}
@@ -383,15 +465,22 @@ def preflight(analysis: Analysis, include_cross: bool | None = None) -> dict:
     return info
 
 
-def apply_plan(analysis: Analysis, outdir: str | Path = "out",
-               confirm: bool = False, include_cross: bool | None = None) -> dict:
+def apply_plan(
+    analysis: Analysis,
+    outdir: str | Path = "out",
+    confirm: bool = False,
+    include_cross: bool | None = None,
+    selected_groups: list[str] | set[str] | None = None,
+) -> dict:
     """Write to Steam: prefer the running client, fall back to the file store."""
     if not confirm:
         raise ServiceError("需要用户在界面上确认后才会写入。")
     cross = getattr(analysis, "include_cross", False) if include_cross is None else include_cross
-    pre = preflight(analysis, include_cross=cross)
+    pre = preflight(analysis, include_cross=cross, selected_groups=selected_groups)
     if pre.get("via") == "client":
-        return client_write_plan(analysis, outdir, include_cross=cross)
+        return client_write_plan(
+            analysis, outdir, include_cross=cross, selected_groups=selected_groups,
+        )
     if not pre.get("writable"):
         raise ServiceError("收藏集文件不可安全写入：" + (pre.get("reason") or "原因未知"))
     if steam_status():
@@ -400,8 +489,10 @@ def apply_plan(analysis: Analysis, outdir: str | Path = "out",
             "请改用文件方式写入：在托盘图标右键 → 退出，再点一次写入。"
         )
     try:
-        backups = writeback_apply(Path(pre["cloud_path"]), analysis.plan,
-                                  Path(outdir), include_cross=cross)
+        backups = writeback_apply(
+            Path(pre["cloud_path"]), analysis.plan,
+            Path(outdir), include_cross=cross, selected_groups=selected_groups,
+        )
     except WritebackError as exc:
         raise ServiceError(str(exc)) from exc
     return {
@@ -452,7 +543,7 @@ def restore_latest(cloud: str | Path | None, outdir: str | Path = "out") -> dict
 
         snapshot_items = [
             item for item in snapshot
-            if isinstance(item, dict) and str(item.get("name", "")).startswith(cefbridge.PREFIX)
+            if isinstance(item, dict) and cefbridge.is_managed_name(str(item.get("name", "")))
         ]
         snapshot_ids = {str(item["id"]) for item in snapshot_items if item.get("id")}
         to_delete = [
@@ -478,7 +569,7 @@ def restore_latest(cloud: str | Path | None, outdir: str | Path = "out") -> dict
         baseline_path = out / BASELINE_NAME
         if snapshot_items:
             baseline_path.write_text(json.dumps(
-                {item["name"][len(cefbridge.PREFIX):]: item.get("added") or [] for item in snapshot_items},
+                {cefbridge.strip_managed_prefix(item["name"]): item.get("added") or [] for item in snapshot_items},
                 ensure_ascii=False, indent=2), encoding="utf-8")
         elif baseline_path.is_file():
             baseline_path.unlink()

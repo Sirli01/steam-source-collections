@@ -34,7 +34,7 @@ def build_parser() -> argparse.ArgumentParser:
         epilog=(
             "最省事（推荐，图形界面）:\n"
             "  python -m steam_source_collections.gui\n"
-            "  Windows 也可双击「启动 Steam 分组工具.bat」；界面里点「一键统计」和「一键写入」\n\n"
+            "  Windows 也可双击「双击启动.bat」；界面里点「一键统计」和「一键写入」\n\n"
             "不装 Python 的纯前端路径:\n"
             "  打开 try-it.html，把导出书签拖到书签栏 → 许可页点一下 → 把 JSON 拖回页面\n\n"
             "想把报告存成文件:\n"
@@ -93,7 +93,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.auto and not bundle_path:
         print(
             "\n还没有找到一键导出包。推荐改用图形界面：python -m steam_source_collections.gui\n"
-            "  （Windows 也可双击「启动 Steam 分组工具.bat」），界面最上面 NO.00 就是导出数据的三步。\n"
+            "  （Windows 也可双击「双击启动.bat」），界面最上面 NO.00 就是导出数据的三步。\n"
             "也可以：\n"
             f"  1. 打开 try-it.html，把「导出 Steam 许可」书签拖到书签栏\n"
             f"  2. 打开 {LICENSE_PAGE} （确认已登录）并点一下那个书签\n"

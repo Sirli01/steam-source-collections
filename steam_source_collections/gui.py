@@ -248,25 +248,37 @@ class Handler(BaseHTTPRequestHandler):
             include_cross = body.get("include_cross")
             if include_cross is not None:
                 include_cross = bool(include_cross)
-            return {"preflight": service.preflight(state.analysis, include_cross=include_cross),
-                    "running": service.steam_status()}
+            raw_selected = body.get("selected_groups")
+            selected = [str(x) for x in raw_selected] if isinstance(raw_selected, list) else None
+            return {
+                "preflight": service.preflight(
+                    state.analysis, include_cross=include_cross, selected_groups=selected,
+                ),
+                "running": service.steam_status(),
+            }
         if path == "/api/apply":
             if state.analysis is None:
                 raise ServiceError("请先点「一键统计」，再写入 Steam。")
             include_cross = body.get("include_cross")
             if include_cross is not None:
                 include_cross = bool(include_cross)
+            raw_selected = body.get("selected_groups")
+            selected = [str(x) for x in raw_selected] if isinstance(raw_selected, list) else None
             # The client channel writes through the running Steam client and
             # uploads itself; only the file fallback needs Steam closed.
-            if service.preflight(state.analysis, include_cross=include_cross).get("via") != "client" \
-                    and service.steam_status():
+            if service.preflight(
+                state.analysis, include_cross=include_cross, selected_groups=selected,
+            ).get("via") != "client" and service.steam_status():
                 raise ServiceError(
                     "Steam 客户端还在运行，而且没有开启本机调试接口——你还没有关闭 Steam。"
                     "请改用文件方式写入：在托盘图标右键 → 退出，再点一次写入。")
             state.log("写入 Steam 收藏集")
-            result = service.apply_plan(state.analysis, state.outdir,
-                                        confirm=bool(body.get("confirm")),
-                                        include_cross=include_cross)
+            result = service.apply_plan(
+                state.analysis, state.outdir,
+                confirm=bool(body.get("confirm")),
+                include_cross=include_cross,
+                selected_groups=selected,
+            )
             state.log("写入完成：" + "、".join(result["collections"]))
             return {**result, "state": self._state(False)}
         if path == "/api/restore":

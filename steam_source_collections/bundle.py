@@ -25,11 +25,11 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .appinfo import (
-    appinfo_path, first_cjk_fragment, read_app_names,
+    appinfo_path, first_cjk_fragment, read_app_names, read_trading_card_appids,
     resolve_localized_fragments, resolve_localized_names,
 )
 from .licenses import LicenseRecord, classify
-from .local import LocalSteam, discover
+from .local import LocalSteam, detect_idled_appids, discover
 from .matching import CJK_RE, MatchResult, build_index, match_package, normalize, strip_promo_suffix
 from .owned import Game
 from .pkgexpand import expand_package_matches
@@ -246,6 +246,10 @@ def load_bundle(path: str | Path, local: LocalSteam | None = None,
         local.cloud_format = switched.cloud_format
         local.collections = switched.collections
         local.playtimes = switched.playtimes
+        local.last_played = switched.last_played
+        local.unlocked_achievement_appids = switched.unlocked_achievement_appids
+        local.defined_achievement_appids = switched.defined_achievement_appids
+        local.saved_appids = switched.saved_appids
         local.package_apps = switched.package_apps
         local.notes = switched.notes
 
@@ -431,11 +435,26 @@ def load_bundle(path: str | Path, local: LocalSteam | None = None,
                     display_names[str(appid)] = label[:120]
                     inferred_names += 1
 
+    card_appids = read_trading_card_appids(cache_bytes, owned_set) if cache_bytes else set()
+    idled_appids = (
+        detect_idled_appids(
+            playtimes,
+            getattr(local, "unlocked_achievement_appids", None) or set(),
+            getattr(local, "defined_achievement_appids", None) or set(),
+            getattr(local, "saved_appids", None) or set(),
+            getattr(local, "last_played", None) or {},
+            card_appids=card_appids,
+        )
+        if local
+        else set()
+    )
+
     games = [
         Game(
             appid=appid,
             name=display_names.get(str(appid), f"App {appid}"),
             playtime_minutes=playtimes.get(appid, 0),
+            idled=(appid in idled_appids and playtimes.get(appid, 0) > 0),
         )
         for appid in owned
     ] + [
@@ -574,6 +593,7 @@ def load_bundle(path: str | Path, local: LocalSteam | None = None,
         "license_total": _as_int(data.get("license_total")) or 0,
         "name_source": data.get("name_source") or "",
         "playtime_count": len(playtimes),
+        "idled_count": sum(1 for game in games[: len(owned)] if game.idled),
         "account_notes": account_notes,
         "diagnostics": data.get("diagnostics") or {},
         "warnings": warnings,

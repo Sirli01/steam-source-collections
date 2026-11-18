@@ -97,10 +97,22 @@ class PlanTests(unittest.TestCase):
         self.assertEqual(self.by_id["unknown"], [1011, 1012])
 
     def test_cross_groups(self):
-        self.assertIn(1005, self.by_id["free_unplayed"])
-        self.assertIn(1009, self.by_id["free_unplayed"])
-        self.assertEqual(self.by_id["free_played"], [1006])
-        self.assertEqual(self.by_id["paid_unplayed"], [1002, 1004])
+        self.assertEqual(self.by_id["played"], [1001, 1003, 1006, 1008, 1011])
+        self.assertEqual(self.by_id["idled"], [])
+        self.assertEqual(self.by_id["unplayed"], [1002, 1004, 1005, 1007, 1009, 1012])
+
+    def test_idled_games_go_to_idled_cross_group_only(self):
+        games = [
+            Game(1, "Played", playtime_minutes=500, idled=False),
+            Game(2, "Idled", playtime_minutes=130, idled=True),
+            Game(3, "Unplayed", playtime_minutes=0, idled=False),
+            Game(4, "Shared", playtime_minutes=200, family_shared=True, idled=True),
+        ]
+        plan = build_plan([], games, [], set(), set(), extra_groups=True)
+        by_id = {g["id"]: g["appids"] for g in plan.groups}
+        self.assertEqual(by_id["played"], [1])
+        self.assertEqual(by_id["idled"], [2])
+        self.assertEqual(by_id["unplayed"], [3])
 
     def test_unmatched_reporting(self):
         self.assertIn(

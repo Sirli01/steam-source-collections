@@ -138,6 +138,49 @@ def read_app_names(path_or_data: str | Path | bytes | bytearray | memoryview, wa
     return found
 
 
+def read_trading_card_appids(path_or_data: str | Path | bytes | bytearray | memoryview, wanted) -> set[int]:
+    """Read owned appids tagged ``category_29 = 1`` (Steam Trading Cards) from v29 appinfo.vdf."""
+    wanted_ids = {int(value) for value in (wanted or ())}
+    if not wanted_ids:
+        return set()
+    data = _load_bytes(path_or_data)
+    if len(data) < 16:
+        return set()
+    magic = struct.unpack_from("<I", data, 0)[0]
+    if (magic & 0xFFFFFF00) != 0x07564400 or (magic & 0xFF) < 0x29:
+        return set()
+    st_off = struct.unpack_from("<Q", data, 8)[0]
+    if not (0 < st_off <= len(data) - 4):
+        return set()
+    count = struct.unpack_from("<I", data, st_off)[0]
+    pos = st_off + 4
+    idx_29: int | None = None
+    for i in range(count):
+        if pos >= len(data):
+            break
+        end = data.find(0, pos)
+        if end < 0:
+            break
+        if data[pos:end] == b"category_29":
+            idx_29 = i
+            break
+        pos = end + 1
+    if idx_29 is None:
+        return set()
+    pat = b"\x02" + struct.pack("<II", idx_29, 1)
+    card_appids: set[int] = set()
+    at = 0
+    while True:
+        hit = data.find(pat, at, st_off)
+        if hit < 0:
+            break
+        appid = _nearest_appid(data, hit, wanted_ids, lookback=LOOKBACK)
+        if appid is not None:
+            card_appids.add(appid)
+        at = hit + 9
+    return card_appids
+
+
 def _scan_localized_fragment(data: bytes, fragment: str, owned_ids: set[int]) -> set[int]:
     needle = str(fragment or "").encode("utf-8")
     if len(needle) < 4:

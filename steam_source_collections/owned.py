@@ -17,6 +17,7 @@ class Game:
     name: str
     playtime_minutes: int = 0
     family_shared: bool = False
+    idled: bool = False
 
     def as_dict(self) -> dict:
         return {
@@ -24,6 +25,7 @@ class Game:
             "name": self.name,
             "playtime_minutes": self.playtime_minutes,
             "family_shared": self.family_shared,
+            "idled": self.idled,
         }
 
 
@@ -76,6 +78,7 @@ def _games_from_payload(data) -> list[Game]:
                     or item.get("is_family_shared")
                     or item.get("owner") == "family"
                 ),
+                idled=bool(item.get("idled")),
             )
         )
     return games

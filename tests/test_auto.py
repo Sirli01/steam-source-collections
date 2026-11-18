@@ -11,7 +11,8 @@ from unittest.mock import patch
 
 from steam_source_collections.bundle import load_bundle
 from steam_source_collections.local import (
-    STEAMID64_BASE, LocalSteam, discover, read_collections, read_playtimes, read_steamid64,
+    STEAMID64_BASE, LocalSteam, detect_idled_appids, discover,
+    read_collections, read_last_played, read_play_signals, read_playtimes, read_steamid64,
 )
 from steam_source_collections.plan import build_plan
 from steam_source_collections.writeback import WritebackError, apply, preview
@@ -63,9 +64,70 @@ class LocalFormatTests(unittest.TestCase):
     def test_playtimes(self):
         with tempfile.TemporaryDirectory() as tmp:
             p = Path(tmp) / "localconfig.vdf"
-            p.write_text('"apps"\n{\n\t"730"\n\t{\n\t\t"Playtime"\t\t"1234"\n\t}\n'
+            p.write_text('"apps"\n{\n\t"730"\n\t{\n\t\t"LastPlayed"\t\t"1700000000"\n\t\t"Playtime"\t\t"1234"\n\t}\n'
                          '\t"570"\n\t{\n\t\t"Playtime"\t\t"0"\n\t}\n}', encoding="utf-8")
             self.assertEqual(read_playtimes(p), {730: 1234, 570: 0})
+            self.assertEqual(read_last_played(p), {730: 1700000000})
+
+    def test_read_play_signals_and_detect_idled(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            id3 = "999"
+            stats = root / "appcache" / "stats"
+            stats.mkdir(parents=True)
+            # 101: schema + unlocked achievements
+            (stats / "UserGameStatsSchema_101.bin").write_bytes(b"\x00achievements\x00")
+            (stats / f"UserGameStats_{id3}_101.bin").write_bytes(b"\x00AchievementTimes\x00" + b"x" * 40)
+            # 102: schema + 38-byte empty stub (idled)
+            (stats / "UserGameStatsSchema_102.bin").write_bytes(b"\x00achievements\x00")
+            (stats / f"UserGameStats_{id3}_102.bin").write_bytes(b"\x00cache\x00" + b"\x00" * 31)
+            # 103: no achievements, but has local save under userdata/999/103/
+            save_dir = root / "userdata" / id3 / "103" / "remote"
+            save_dir.mkdir(parents=True)
+            (save_dir / "save.dat").write_bytes(b"ok")
+            # 104: librarycache shows total>0 unlocked=0 (idled)
+            lib = root / "userdata" / id3 / "config" / "librarycache"
+            lib.mkdir(parents=True)
+            (lib / "achievement_progress.json").write_text(
+                json.dumps({"nVersion": 3, "mapCache": [[104, {"appid": 104, "unlocked": 0, "total": 12}]]}),
+                encoding="utf-8",
+            )
+            # 105..108: within 60..460m, no achievements, same batch day & identical playtime cluster
+            # 111: short run (<60m) with schema -> NOT idled (just tried briefly)
+            # 112: long run (>460m) with schema -> NOT idled (played past card drop window)
+            (stats / "UserGameStatsSchema_111.bin").write_bytes(b"\x00achievements\x00")
+            (stats / "UserGameStatsSchema_112.bin").write_bytes(b"\x00achievements\x00")
+            # 114: has schema, standalone day, NO trading cards -> excluded when card_appids known
+            (stats / "UserGameStatsSchema_114.bin").write_bytes(b"\x00achievements\x00")
+            # 113: identical-playtime cluster in 115..360m without achievements or batch day
+            batch_day_ts = 20000 * 86400 + 3600
+            playtimes = {
+                101: 120, 102: 135, 103: 90, 104: 200,
+                105: 250, 106: 120, 107: 120, 108: 120,
+                109: 600, 110: 0, 111: 15, 112: 600, 113: 250, 114: 205,
+            }
+            last_played = {
+                105: batch_day_ts, 106: batch_day_ts + 10,
+                107: batch_day_ts + 20, 108: batch_day_ts + 30,
+                109: batch_day_ts - 86400, 113: batch_day_ts - 172800,
+                114: batch_day_ts - 259200,
+            }
+
+            unlocked, defined, saved = read_play_signals(root, id3)
+            self.assertIn(101, unlocked)
+            self.assertTrue({101, 102, 104, 111, 112, 114}.issubset(defined))
+            self.assertIn(103, saved)
+
+            idled = detect_idled_appids(
+                playtimes, unlocked, defined, saved, last_played,
+                card_appids={102, 104, 113},
+            )
+            self.assertEqual(idled, {102, 104, 105, 106, 107, 108, 113})
+            self.assertNotIn(111, idled)
+            self.assertNotIn(112, idled)
+            self.assertNotIn(114, idled)
+            # Empty signals fall back to not marking anything idled
+            self.assertEqual(detect_idled_appids(playtimes, set(), set(), set(), last_played), set())
 
     def test_steamid64_picks_most_recent(self):
         with tempfile.TemporaryDirectory() as tmp:

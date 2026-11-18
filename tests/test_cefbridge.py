@@ -80,6 +80,40 @@ class MergePlanTests(unittest.TestCase):
         self.assertEqual(items[0]["added"], [1001, 1002, 1003])
         self.assertEqual(items[1]["added"], [])
 
+    def test_renamed_source_group_reuses_id_and_preserves_edits(self):
+        renamed_plan = Plan(
+            groups=[
+                {"id": "store", "name": "Steam购买", "kind": "source",
+                 "appids": [1001, 1002, 1003], "games": []},
+                {"id": "retail", "name": "CDK激活", "kind": "source",
+                 "appids": [2001], "games": []},
+            ],
+            assignments={}, unmatched_licenses=[], unmatched_games=[], stats={},
+        )
+        existing = [
+            {"id": "uc-old-store", "name": cefbridge.LEGACY_PREFIX + "① Steam 商店购买",
+             "added": [1001, 9999], "removed": []},
+            {"id": "uc-old-retail", "name": "② CDK激活",
+             "added": [2001], "removed": []},
+        ]
+        baseline = {"① Steam 商店购买": [1001, 1002], "② CDK激活": [2001]}
+        items = service.merge_plan_with_client(renamed_plan, existing, baseline)
+        self.assertEqual(len(items), 2)
+        self.assertEqual(items[0]["id"], "uc-old-store")
+        self.assertEqual(items[0]["name"], PREFIX + "Steam购买")
+        # 1002 manually removed stays removed; 9999 manually added stays; 1003 new joins
+        self.assertEqual(items[0]["added"], [1001, 1003, 9999])
+        self.assertEqual(items[1]["id"], "uc-old-retail")
+        self.assertEqual(items[1]["name"], PREFIX + "CDK激活")
+
+    def test_selected_groups_filters_written_collections(self):
+        items = service.merge_plan_with_client(
+            plan(), [], selected_groups=["store", "cross"]
+        )
+        self.assertEqual([item["name"] for item in items], [
+            PREFIX + "① Steam 商店购买", PREFIX + "③b 吃灰区",
+        ])
+
 
 class CEFBridgeTests(unittest.TestCase):
     def test_debugger_requires_steam_user_agent(self):
@@ -191,6 +225,24 @@ class ClientWriteFlowTests(unittest.TestCase):
             self.assertEqual(restored_saved[0]["id"], "uc-old")
             self.assertEqual(restored_saved[0]["added"], [999])
             self.assertEqual(deleted_ids, ["uc-new"])
+
+    def test_client_write_cleans_up_stale_managed_collections(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            existing_before = [
+                {"id": "uc-store", "name": PREFIX + "① Steam 商店购买", "added": [1001], "removed": []},
+                {"id": "uc-stale", "name": PREFIX + "③b 免费领取·从未启动（吃灰区）", "added": [5001], "removed": []},
+            ]
+            deleted = []
+            with patch.object(cefbridge, "list_managed", return_value=existing_before), \
+                 patch.object(cefbridge, "save_many",
+                              side_effect=lambda items: [
+                                  {"id": item["id"], "name": item["name"], "ok": True}
+                                  for item in items]), \
+                 patch.object(cefbridge, "delete_many",
+                              side_effect=lambda ids: (
+                                  deleted.extend(ids) or [{"id": cid, "ok": True} for cid in ids])):
+                service.client_write_plan(analysis(), tmp, include_cross=False)
+            self.assertEqual(deleted, ["uc-stale"])
 
 
 if __name__ == "__main__":

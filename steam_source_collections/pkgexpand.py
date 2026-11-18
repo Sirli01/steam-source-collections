@@ -43,6 +43,10 @@ def package_title_score(package_name: str, app_name: str) -> float:
     prefix = os.path.commonprefix([package_key, app_key])
     if len(prefix) >= 8 and len(prefix) >= 0.6 * min(len(package_key), len(app_key)):
         return 0.70 + 0.25 * len(prefix) / max(len(package_key), len(app_key))
+    if len(prefix) >= 5:
+        rem = short[len(prefix):]
+        if len(rem) >= 2 and rem in long[len(prefix):]:
+            return 0.78 + 0.2 * len(short) / len(long)
     return 0.0
 
 
@@ -155,6 +159,20 @@ def expand_package_matches(
             if not labels:
                 continue
             row_score = max(package_title_score(record.package_name, label) for label in labels)
+            extra_labels = [names.get(str(appid), "") for appid in extra]
+            extra_labels = [label for label in extra_labels if label and not label.startswith("App ")]
+            matched_titles = [
+                str(getattr(game, "name", "") or "")
+                for game in match.games
+                if getattr(game, "name", "") and not str(getattr(game, "name", "")).startswith("App ")
+            ]
+            if matched_titles and extra_labels:
+                sibling_score = max(
+                    package_title_score(title, elabel)
+                    for title in matched_titles
+                    for elabel in extra_labels
+                )
+                row_score = max(row_score, sibling_score)
             if row_score >= threshold:
                 scored_rows.append((row_score, pid, apps, extra))
         if not scored_rows:

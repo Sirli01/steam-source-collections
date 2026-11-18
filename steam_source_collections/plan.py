@@ -9,12 +9,12 @@ from .matching import MatchResult, normalize
 from .owned import Game
 
 GROUPS: tuple[tuple[str, str], ...] = (
-    ("store", "① Steam 商店购买"),
-    ("retail", "② CDK·Key 激活"),
-    ("free", "③ 免费领取·喜加一"),
-    ("gift", "④ 赠礼·订阅"),
-    ("family", "⑤ 家庭共享（别人的）"),
-    ("unknown", "⑥ 未能判定（需人工或 AI 兜底）"),
+    ("store", "Steam购买"),
+    ("retail", "CDK激活"),
+    ("free", "免费领取"),
+    ("gift", "赠礼与订阅"),
+    ("family", "家庭共享"),
+    ("unknown", "待核对"),
 )
 
 # Paid licenses win when a game somehow shows up more than once: a purchased
@@ -79,6 +79,7 @@ def build_plan(
             "appid": game.appid,
             "name": game.name,
             "playtime_minutes": game.playtime_minutes,
+            "idled": bool(getattr(game, "idled", False)),
             "group": "unknown",
             "method_raw": "",
             "license_package": "",
@@ -156,15 +157,18 @@ def build_plan(
     ]
 
     if extra_groups:
-        free_unplayed = [r for r in group_rows["free"] if r["playtime_minutes"] == 0]
-        paid_unplayed = [
-            r for r in group_rows["store"] + group_rows["retail"] if r["playtime_minutes"] == 0
+        owned_rows = [
+            assignments[appid]
+            for appid in sorted(assignments)
+            if assignments[appid]["group"] != "family"
         ]
-        free_played = [r for r in group_rows["free"] if r["playtime_minutes"] > 0]
+        played = [r for r in owned_rows if r["playtime_minutes"] > 0 and not r.get("idled")]
+        idled = [r for r in owned_rows if r["playtime_minutes"] > 0 and r.get("idled")]
+        unplayed = [r for r in owned_rows if r["playtime_minutes"] == 0]
         for group_id, name, rows in (
-            ("free_unplayed", "③b 免费领取·从未启动（吃灰区）", free_unplayed),
-            ("free_played", "③c 免费领取·真的玩过", free_played),
-            ("paid_unplayed", "⑦ 付费购入·从未启动", paid_unplayed),
+            ("played", "真正玩过", played),
+            ("idled", "挂卡刷时长（试验）", idled),
+            ("unplayed", "从未启动", unplayed),
         ):
             groups.append(
                 {

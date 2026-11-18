@@ -9,7 +9,9 @@ from pathlib import Path
 from unittest.mock import patch
 
 from steam_source_collections.plan import Plan
-from steam_source_collections.writeback import PREFIX, WritebackError, apply, preview
+from steam_source_collections.writeback import (
+    LEGACY_PREFIX, PREFIX, WritebackError, apply, is_managed_name, preview,
+)
 
 
 def fake_plan() -> Plan:
@@ -37,7 +39,7 @@ def write_fake_steam_file(path: Path) -> None:
             "collections": {
                 "user-collections": {
                     "sys-favorites": {"name": "收藏夹", "added": [1001], "removed": []},
-                    "old-managed": {"name": PREFIX + "旧分组", "added": [9999], "removed": []},
+                    "old-managed": {"name": LEGACY_PREFIX + "旧分组", "added": [9999], "removed": []},
                 }
             }
         },
@@ -54,7 +56,7 @@ class WritebackTests(unittest.TestCase):
             self.assertEqual(info["container"], "/data/collections/user-collections")
             self.assertEqual(info["list_key"], "added")
             self.assertEqual(info["appid_type"], "int")
-            self.assertEqual(info["existing_managed_collections"], [PREFIX + "旧分组"])
+            self.assertEqual(info["existing_managed_collections"], [LEGACY_PREFIX + "旧分组"])
 
     def test_apply_keeps_system_collections_and_makes_backups(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -151,7 +153,7 @@ class KVPairsWritebackTests(unittest.TestCase):
             new_entries = written[len(original):]
             self.assertTrue(all(e[0].startswith("user-collections.uc-") for e in new_entries))
             values = [json.loads(e[1]["value"]) for e in new_entries]
-            self.assertTrue(all(v["name"].startswith(PREFIX) for v in values))
+            self.assertTrue(all(is_managed_name(v["name"]) for v in values))
             self.assertEqual(values[0]["added"], [1001, 1002])
             self.assertTrue(all(int(e[1]["version"]) > 30 for e in new_entries))
 
@@ -174,6 +176,17 @@ class KVPairsWritebackTests(unittest.TestCase):
             with self.assertRaises(WritebackError):
                 apply(target, self.plan(), root / "out")
             self.assertEqual(json.loads(target.read_text(encoding="utf-8")), original)
+
+    @patch("steam_source_collections.writeback._steam_is_running", return_value=False)
+    def test_selected_groups_overrides_default_source_filter(self, _running):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            target = root / "cloud-storage-namespace-1.json"
+            write_kv_pairs_file(target)
+            info = preview(target, self.plan(), selected_groups=["free", "extra"])
+            self.assertEqual(info["collections_to_write"], [
+                PREFIX + "③ 免费领取·喜加一", PREFIX + "③b 吃灰区",
+            ])
 
 
 class NoConsoleWindowTests(unittest.TestCase):

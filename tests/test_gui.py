@@ -13,7 +13,7 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 from unittest.mock import patch
 
-from steam_source_collections import gui, service
+from steam_source_collections import cefbridge, gui, service
 from steam_source_collections.local import LocalSteam
 from steam_source_collections.plan import build_plan
 from steam_source_collections.bundle import load_bundle
@@ -126,7 +126,7 @@ class ServiceTests(unittest.TestCase):
                 written = json.loads(cloud.read_text(encoding="utf-8"))
                 self.assertTrue(any(
                     isinstance(item, list) and isinstance(item[1], dict)
-                    and "[来源]" in str(item[1].get("value", ""))
+                    and cefbridge.PREFIX in str(item[1].get("value", ""))
                     for item in written))
                 self.assertTrue(any(item[0] == "user-collections.uc-old" for item in written))
                 restored = service.restore_latest(cloud, out)

@@ -141,6 +141,37 @@ class PackageExpandTests(unittest.TestCase):
         self.assertEqual({g.appid for g in matches[0].games}, {356190, 866850})
         self.assertEqual(matches[0].via, "bundle")
 
+    def test_localized_match_expands_unclaimed_english_sibling_in_package(self):
+        rec, matches, games, names, _ = fixture(
+            "《地平线 零之曙光™》重制版",
+            {
+                2561580: "Horizon Zero Dawn™ Remastered",
+                3260530: "Horizon Zero Dawn™ Remastered Digital Artbook",
+            },
+        )
+        matches[0] = MatchResult(games=[games[2561580]], via="localized", score=0.92)
+        result = expand_package_matches(
+            [rec], matches, set(), {1155790: [2561580, 3260530]}, names, games
+        )
+        self.assertEqual(result["expanded_rows"], 1)
+        self.assertEqual(result["expanded_apps"], 1)
+        self.assertEqual({g.appid for g in matches[0].games}, {2561580, 3260530})
+
+    def test_vr_dlc_expands_to_vr_mode_package(self):
+        rec, matches, games, names, _ = fixture(
+            "Gal*Gun 2 - VR DLC",
+            {932660: "Gal*Gun 2 - Doki Doki VR Mode"},
+        )
+        self.assertGreater(
+            package_title_score("Gal*Gun 2 - VR DLC", "Gal*Gun 2 - Doki Doki VR Mode"),
+            0.76,
+        )
+        result = expand_package_matches(
+            [rec], matches, set(), {302203: [932660]}, names, games
+        )
+        self.assertEqual(result["expanded_rows"], 1)
+        self.assertEqual([g.appid for g in matches[0].games], [932660])
+
 
 if __name__ == "__main__":
     unittest.main()

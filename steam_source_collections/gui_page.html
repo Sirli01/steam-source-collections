@@ -370,8 +370,8 @@ body.dragging .drop{display:grid}
     <h2><span class="num">03</span> 一键写入 Steam 收藏集</h2>
     <p class="lead">勾选下面想同步到 Steam 的分组（写入后会带「✥ 」符号前缀以区分你手动建的分组，旧版带「[来源]」或「①～⑨」前缀的分组会自动就地改名，未勾选的旧本工具分组会被清理），你的收藏夹和其它自定义分组一个都不动。Steam 开着时由 <b>Steam 客户端自己写入并同步云端</b>，<b>不用退出、不用重启</b>。</p>
     <div style="background:var(--panel);border:1px solid var(--rule);border-left:4px solid var(--ink);padding:12px 14px;margin:0 0 14px">
-      <label class="check" style="margin:0;font-size:15px;font-weight:700"><input type="checkbox" id="optWriteCross"><span>一并勾选游玩状态分组（试验：真正玩过 / 挂卡刷时长（试验） / 从未启动）</span></label>
-      <div style="color:var(--ink2);font-size:13px;margin:4px 0 0 26px">试验功能：结合掉卡时长区间（1～7.7 小时）、集换式卡牌特性、零成就/零本地存档、相同游玩时长聚类与同日批量记录估算。仅运行几分钟（&lt;1 小时）、游玩超 7.7 小时、或卖卡后继续玩出成就/存档的游戏都会归入「真正玩过」。</div>
+      <label class="check" style="margin:0;font-size:15px;font-weight:700"><input type="checkbox" id="optWriteCross"><span>一并勾选「✥ 挂卡未玩（测试）」分组</span></label>
+      <div style="color:var(--ink2);font-size:13px;margin:4px 0 0 26px">Steam 原生动态筛选已提供「已玩过 / 未玩过」，本工具只额外补充原生做不到的「挂卡未玩（测试）」：结合掉卡时长区间（1～7.7 小时）、集换式卡牌特性、零成就/零本地存档、相同游玩时长聚类与同日批量记录估算（&lt;1 小时、&gt;7.7 小时或有成就/存档不会误划入）。</div>
       <div class="write-groups" id="writeGroupList"></div>
     </div>
     <button class="btn big write" id="btnApply" disabled>一键写入 Steam →</button>
@@ -509,9 +509,9 @@ function renderResult(d){
     (d.meta.family_apps?`、<b>${d.meta.family_apps}</b> 款家庭共享游戏`:"")+`，结果如下。`;
   $("groups").innerHTML=src.map(x=>groupCardHtml(x,g.indexOf(x),totalSrc)).join("");
   $("crossBar").innerHTML=cross.length
-    ? `<div class="sub-head"><span>游玩状态分组（个人库 ${totalOwned} 款）</span><span style="font-weight:500;letter-spacing:0">点击查看具体游戏</span></div>`+
+    ? `<div class="sub-head"><span>附加分组（个人库 ${totalOwned} 款 · Steam 原生筛选不含此项）</span><span style="font-weight:500;letter-spacing:0">点击查看具体游戏</span></div>`+
       `<div class="groups">${cross.map(x=>groupCardHtml(x,g.indexOf(x),totalOwned)).join("")}</div>`
-    : `<span class="cross-chip">未生成游玩状态分组（缺少游玩时长）</span>`;
+    : `<span class="cross-chip">未生成「挂卡未玩（测试）」（缺少游玩时长）</span>`;
   renderWriteGroups();
   const recNames=d.meta.cache_recovered_names?` · appinfo 补全 ${d.meta.cache_recovered_names} 个名称`:"";
   const netNames=d.meta.online_recovered_names?` · 联网补全 ${d.meta.online_recovered_names} 个名称`:"";

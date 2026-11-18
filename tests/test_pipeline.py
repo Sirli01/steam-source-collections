@@ -97,9 +97,9 @@ class PlanTests(unittest.TestCase):
         self.assertEqual(self.by_id["unknown"], [1011, 1012])
 
     def test_cross_groups(self):
-        self.assertEqual(self.by_id["played"], [1001, 1003, 1006, 1008, 1011])
         self.assertEqual(self.by_id["idled"], [])
-        self.assertEqual(self.by_id["unplayed"], [1002, 1004, 1005, 1007, 1009, 1012])
+        self.assertNotIn("played", self.by_id)
+        self.assertNotIn("unplayed", self.by_id)
 
     def test_idled_games_go_to_idled_cross_group_only(self):
         games = [
@@ -110,9 +110,9 @@ class PlanTests(unittest.TestCase):
         ]
         plan = build_plan([], games, [], set(), set(), extra_groups=True)
         by_id = {g["id"]: g["appids"] for g in plan.groups}
-        self.assertEqual(by_id["played"], [1])
         self.assertEqual(by_id["idled"], [2])
-        self.assertEqual(by_id["unplayed"], [3])
+        self.assertNotIn("played", by_id)
+        self.assertNotIn("unplayed", by_id)
 
     def test_unmatched_reporting(self):
         self.assertIn(
@@ -160,7 +160,7 @@ class PlanTests(unittest.TestCase):
             self.assertTrue(all(path.is_file() for path in paths))
             payload = json.loads((Path(tmp) / "collections_plan.json").read_text(encoding="utf-8"))
             self.assertEqual(payload["schema"], "steam-source-collections/1")
-            self.assertEqual(len(payload["groups"]), 9)
+            self.assertEqual(len(payload["groups"]), 7)
             html = (Path(tmp) / "report.html").read_text(encoding="utf-8")
             self.assertIn("没有许可记录的游戏", html)
             self.assertIn("copyBox(", html)

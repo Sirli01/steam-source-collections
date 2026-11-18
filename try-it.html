@@ -1550,14 +1550,9 @@ function buildPlan(records,games,family,conflict="priority",extra=true,matches=n
   const groups=GROUPS.map(([id,name,color])=>({id,name,color,kind:"source",
     appids:rows[id].map(r=>r.appid),games:rows[id]}));
   if(extra){
-    const ownedRows=[...assignments.keys()].sort((a,b)=>a-b).map(id=>assignments.get(id)).filter(r=>r.group!=="family");
-    const played=ownedRows.filter(r=>r.playtime_minutes>0&&!r.idled);
-    const idled=ownedRows.filter(r=>r.playtime_minutes>0&&r.idled);
-    const unplayed=ownedRows.filter(r=>r.playtime_minutes===0);
-    [["played","真正玩过",played],
-     ["idled","挂卡刷时长（试验）",idled],
-     ["unplayed","从未启动",unplayed]
-    ].forEach(([id,name,rs])=>groups.push({id,name,kind:"cross",appids:rs.map(r=>r.appid),games:rs}));
+    const idled=[...assignments.keys()].sort((a,b)=>a-b).map(id=>assignments.get(id))
+      .filter(r=>r.group!=="family"&&r.playtime_minutes>0&&r.idled);
+    groups.push({id:"idled",name:"挂卡未玩（测试）",kind:"cross",appids:idled.map(r=>r.appid),games:idled});
   }
   return{schema:"steam-source-collections/1",groups,
     assignments:[...assignments.values()].sort((a,b)=>a.appid-b.appid),
@@ -1599,7 +1594,7 @@ function render(plan,label){
   $("cross").innerHTML=plan.groups.filter(g=>g.kind==="cross").map(g=>
     `<div class="chip">${esc(g.name)} <b>${g.games.length}</b></div>`).join("")
     + (plan.no_playtime
-      ? `<div class="chip" style="border-color:var(--warn);color:var(--warn)">⚠ 本次导出包不含游玩时长，未生成「真正玩过 / 挂卡刷时长（试验） / 从未启动」，以免给出错数字</div>`
+      ? `<div class="chip" style="border-color:var(--warn);color:var(--warn)">⚠ 本次导出包不含游玩时长，未生成「挂卡未玩（测试）」，以免给出错数字</div>`
       : "");
   const issues=[
     ...plan.unmatched_licenses.map(r=>`<tr><td>${esc(r.date)}</td><td class="clip">${esc(r.package_name)}</td><td>${esc(r.method_raw)}</td><td>许可行没对上游戏：${esc(r.note||"未找到可靠匹配")}</td></tr>`),
@@ -1641,8 +1636,8 @@ function runBundle(text,filename){
     bullets.push(m.family_apps
       ? `⑤ 家庭共享读到 ${m.family_apps} 款家人借给你的游戏，已自动归组（它们不在你的许可页里，属正常情况）。`
       : `⑤ 家庭共享：这份包里没有借来的游戏清单；重新拖上面的按钮并在许可页点一次即可自动填好 ⑤ 组。`);
-    bullets.push(m.has_playtimes?`含 ${m.playtime_count} 条游玩时长，游玩状态分组可用。`:
-      `本次不含游玩时长，未生成「真正玩过 / 挂卡刷时长（试验） / 从未启动」等状态分组，以免给出错数字；启动图形界面可补本机时长并估算挂卡刷时长。`);
+    bullets.push(m.has_playtimes?`含 ${m.playtime_count} 条游玩时长，附加分组可用。`:
+      `本次不含游玩时长，未生成「挂卡未玩（测试）」，以免给出错数字；启动图形界面可结合本机时长与卡牌/成就信号估算。`);
     setBanner("✅ 已完成："+filename,bullets);
     hero(`✅ 已读取 ${filename}，结果已生成（右侧）`,true);
   }

@@ -264,7 +264,6 @@ _LEGACY_NUM_TO_ID = {
     "⑤": "family",
     "⑥": "unknown",
     "⑧": "idled",
-    "⑨": "unplayed",
 }
 
 
@@ -275,11 +274,11 @@ def _legacy_target_id(raw_name: str) -> str | None:
             text = text[len(head):]
     if not text:
         return None
+    if "挂卡" in text:
+        return "idled"
     lead = text[0]
     if lead == "③" and len(text) > 1 and text[1] in ("b", "c"):
         return None
-    if lead == "⑦":
-        return "played" if "真正玩过" in text else None
     return _LEGACY_NUM_TO_ID.get(lead)
 
 

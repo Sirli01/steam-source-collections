@@ -157,28 +157,22 @@ def build_plan(
     ]
 
     if extra_groups:
-        owned_rows = [
+        idled = [
             assignments[appid]
             for appid in sorted(assignments)
             if assignments[appid]["group"] != "family"
+            and assignments[appid]["playtime_minutes"] > 0
+            and assignments[appid].get("idled")
         ]
-        played = [r for r in owned_rows if r["playtime_minutes"] > 0 and not r.get("idled")]
-        idled = [r for r in owned_rows if r["playtime_minutes"] > 0 and r.get("idled")]
-        unplayed = [r for r in owned_rows if r["playtime_minutes"] == 0]
-        for group_id, name, rows in (
-            ("played", "真正玩过", played),
-            ("idled", "挂卡刷时长（试验）", idled),
-            ("unplayed", "从未启动", unplayed),
-        ):
-            groups.append(
-                {
-                    "id": group_id,
-                    "name": name,
-                    "kind": "cross",
-                    "appids": [row["appid"] for row in rows],
-                    "games": rows,
-                }
-            )
+        groups.append(
+            {
+                "id": "idled",
+                "name": "挂卡未玩（测试）",
+                "kind": "cross",
+                "appids": [row["appid"] for row in idled],
+                "games": idled,
+            }
+        )
 
     stats = {
         "games_total": len(games),
